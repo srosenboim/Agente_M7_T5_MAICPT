@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Se não tiver chave, pergunta e salva no .env
-if not os.environ.get("ANTHROPIC_API_KEY"):
+if True:
     print("\n" + "=" * 60)
     print("  AGENTE DE COORDENAÇÃO E SEGURANÇA AEC")
     print("=" * 60)

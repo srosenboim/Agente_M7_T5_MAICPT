@@ -202,8 +202,47 @@ agent_os = AgentOS(
 app = agent_os.get_app()
 
 # ---------------------------------------------------------------------------
-# Execução
+# Execução — sobe backend + frontend automaticamente
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    agent_os.serve(app="playground:app", reload=True)
+    import subprocess
+    import threading
+    import time
+    import webbrowser
+
+    agent_ui_path = Path(__file__).parent / "agent-ui"
+
+    def subir_frontend():
+        """Sobe o agent-ui (Next.js) em segundo plano."""
+        if not agent_ui_path.exists():
+            return
+        # instala dependências se necessário
+        subprocess.run(
+            "npm install -g pnpm && pnpm install",
+            cwd=str(agent_ui_path),
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.Popen(
+            "pnpm dev",
+            cwd=str(agent_ui_path),
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def abrir_navegador():
+        """Aguarda o frontend subir e abre o navegador."""
+        time.sleep(8)
+        webbrowser.open("http://localhost:3000")
+
+    print("\n✅ Iniciando backend em http://localhost:7777")
+    print("🚀 Iniciando interface web em http://localhost:3000")
+    print("🌐 O navegador abrirá automaticamente em alguns segundos...\n")
+
+    threading.Thread(target=subir_frontend, daemon=True).start()
+    threading.Thread(target=abrir_navegador, daemon=True).start()
+
+    agent_os.serve(app="playground:app", reload=False)

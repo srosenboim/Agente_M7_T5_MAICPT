@@ -265,18 +265,62 @@ async def viewer_data():
                 if not r.get("conforme") and "porta_apartamento" in r:
                     nc_nomes.add(r["porta_apartamento"])
         except: pass
-        # Portas com largura abaixo do mínimo (NBR 9050: 0.80m)
-        # Usa escala do modelo para converter para metros
+        # Lógica correta de rota de fuga:
+        # 1. Portas de entrada (>=0.80m) longe da escada → marca a porta
+        # 2. Porta de escada que não é corta-fogo → marca a porta
+        # 3. Escada sem nenhuma porta → marca a escada
         try:
             import ifcopenshell.util.unit as _ifc_unit
+            import ifcopenshell.util.placement as _ifc_pl
+            import math as _math
             model_temp = ifcopenshell.open(ifc)
             _escala = _ifc_unit.calculate_unit_scale(model_temp)
+
+            # Separa portas por tamanho
+            portas_entrada = []  # >= 0.80m
             for door in model_temp.by_type("IfcDoor"):
                 w = getattr(door, "OverallWidth", None)
-                if w is not None:
-                    w_metros = float(w) * _escala
-                    if w_metros < 0.80:
-                        nc_nomes.add(door.Name)
+                if w and float(w) * _escala >= 0.80:
+                    pos = _ifc_pl.get_local_placement(door.ObjectPlacement)
+                    x, y = pos[0,3] * _escala, pos[1,3] * _escala
+                    pt = getattr(door, "PredefinedType", None)
+                    ot = (getattr(door, "ObjectType", "") or "").lower()
+                    nm = (door.Name or "").lower()
+                    e_corta_fogo = any(k in ot+nm for k in ("corta","fire","emergency","cf"))
+                    portas_entrada.append({
+                        "nome": door.Name, "x": x, "y": y,
+                        "e_corta_fogo": e_corta_fogo, "w": float(w)*_escala
+                    })
+
+            # Posições das escadas
+            pos_escadas = []
+            for stair in model_temp.by_type("IfcStair"):
+                pos = _ifc_pl.get_local_placement(stair.ObjectPlacement)
+                pos_escadas.append({
+                    "nome": stair.Name,
+                    "x": pos[0,3] * _escala,
+                    "y": pos[1,3] * _escala
+                })
+
+            LIMITE_FUGA = 30.0  # metros
+
+            if pos_escadas:
+                for porta in portas_entrada:
+                    # Distância até escada mais próxima
+                    menor_dist = min(
+                        _math.hypot(porta["x"]-e["x"], porta["y"]-e["y"])
+                        for e in pos_escadas
+                    )
+                    if porta["e_corta_fogo"]:
+                        # Porta de escada sem ser corta-fogo — marca amarelo
+                        nc_nomes.add(porta["nome"])
+                    elif menor_dist > LIMITE_FUGA:
+                        # Porta longe da escada — marca amarelo
+                        nc_nomes.add(porta["nome"])
+            else:
+                # Sem escadas identificadas — marca todas as portas de entrada
+                for porta in portas_entrada:
+                    nc_nomes.add(porta["nome"])
         except: pass
         try:
             for r in verificar_sistema_incendio(ifc):
@@ -509,63 +553,79 @@ async def salvar_relatorio(request: Request):
 async def download_pdf():
     global relatorio_html_global
     if not relatorio_html_global:
-        return JSONResponse({"erro": "Nenhum relatório gerado ainda. Execute uma análise primeiro."}, status_code=400)
+        return JSONResponse({"erro": "Nenhum relatorio gerado ainda. Execute uma analise primeiro."}, status_code=400)
     try:
-        from weasyprint import HTML as WH, CSS
+        from fpdf import FPDF
+        import re, html as html_lib
+
         ifc_nome = Path(ifc_ativo() or "modelo").name if ifc_ativo() else "modelo"
-        html_completo = f"""<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<style>
-  body {{ font-family: Arial, sans-serif; font-size: 12px; color: #1a1a1a; margin: 40px; }}
-  h1 {{ font-size: 18px; color: #1a1a1a; border-bottom: 2px solid #f97316; padding-bottom: 8px; }}
-  h2 {{ font-size: 15px; color: #c2410c; margin-top: 20px; }}
-  h3 {{ font-size: 13px; color: #1d4ed8; }}
-  table {{ width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11px; }}
-  th {{ background: #f3f4f6; padding: 6px 10px; text-align: left; border: 1px solid #d1d5db; }}
-  td {{ padding: 6px 10px; border: 1px solid #e5e7eb; }}
-  tr:nth-child(even) td {{ background: #f9fafb; }}
-  p {{ margin: 6px 0; line-height: 1.5; }}
-  ul, ol {{ padding-left: 20px; margin: 6px 0; }}
-  li {{ margin: 3px 0; }}
-  code {{ background: #f3f4f6; padding: 1px 4px; border-radius: 3px; font-size: 10px; }}
-  .header {{ background: #1a1a1a; color: white; padding: 16px; margin: -40px -40px 20px; }}
-  .header h1 {{ color: white; border: none; }}
-  .header p {{ color: #a1a1aa; font-size: 11px; margin: 4px 0 0; }}
-</style>
-</head>
-<body>
-<div class="header">
-  <h1>🏗 Relatório de Auditoria BIM — Coordenação e Segurança AEC</h1>
-  <p>Arquivo: {ifc_nome} | Agno + Claude Sonnet 4.6 + ifcopenshell</p>
-</div>
-{relatorio_html_global}
-</body>
-</html>"""
+
+        # Convert HTML to plain text
+        text = re.sub(r'<li[^>]*>', '- ', relatorio_html_global)
+        text = re.sub(r'<h[1-3][^>]*>(.*?)</h[1-3]>', lambda m: chr(10)+'###'+m.group(1)+'###'+chr(10), text, flags=re.DOTALL)
+        text = re.sub(r'<tr[^>]*>', chr(10), text)
+        text = re.sub(r'<t[dh][^>]*>(.*?)</t[dh]>', lambda m: m.group(1)+' | ', text, flags=re.DOTALL)
+        text = re.sub(r'<[^>]+>', ' ', text)
+        text = html_lib.unescape(text)
+        text = re.sub(r'[ \t]+', ' ', text)
+        text = re.sub(r'\n{3,}', chr(10)+chr(10), text)
+        # Encode to latin-1 safely
+        text = text.encode('latin-1', errors='replace').decode('latin-1')
+        ifc_safe = ifc_nome.encode('latin-1', errors='replace').decode('latin-1')
+
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+
+        # Header
+        pdf.set_fill_color(26, 26, 26)
+        pdf.rect(0, 0, 210, 28, 'F')
+        pdf.set_font('Helvetica', 'B', 15)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_xy(10, 8)
+        pdf.cell(0, 8, 'Relatorio de Auditoria BIM - Coordenacao e Seguranca AEC', new_x='LMARGIN', new_y='NEXT')
+        pdf.set_font('Helvetica', '', 9)
+        pdf.set_text_color(161, 161, 170)
+        pdf.set_x(10)
+        pdf.cell(0, 6, f'Arquivo: {ifc_safe}  |  Agno + Claude Sonnet 4.6 + ifcopenshell', new_x='LMARGIN', new_y='NEXT')
+        pdf.set_y(35)
+
+        for line in text.split(chr(10)):
+            line = line.strip()
+            if not line:
+                pdf.ln(3)
+            elif '###' in line:
+                clean = line.replace('###','').strip()
+                pdf.set_font('Helvetica', 'B', 12)
+                pdf.set_text_color(194, 65, 12)
+                pdf.ln(4)
+                if clean:
+                    pdf.cell(0, 7, clean[:90], new_x='LMARGIN', new_y='NEXT')
+                pdf.set_draw_color(249, 115, 22)
+                pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                pdf.ln(2)
+            elif ' | ' in line:
+                pdf.set_font('Helvetica', '', 9)
+                pdf.set_text_color(50, 50, 50)
+                pdf.set_fill_color(243, 244, 246)
+                pdf.multi_cell(0, 5, line[:200])
+            elif line.startswith('-'):
+                pdf.set_font('Helvetica', '', 10)
+                pdf.set_text_color(26, 26, 26)
+                pdf.set_x(15)
+                pdf.multi_cell(180, 5, line[:200])
+            else:
+                pdf.set_font('Helvetica', '', 10)
+                pdf.set_text_color(26, 26, 26)
+                pdf.multi_cell(0, 5, line[:200])
+
         saida = Path(__file__).parent / "relatorio_auditoria.pdf"
-        WH(string=html_completo).write_pdf(str(saida))
-        return FileResponse(path=str(saida), filename="relatorio_auditoria.pdf",
-                           media_type="application/pdf",
-                           headers={"Content-Disposition": 'attachment; filename="relatorio_auditoria.pdf"'})
+        pdf.output(str(saida))
+        return FileResponse(
+            path=str(saida),
+            filename="relatorio_auditoria.pdf",
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="relatorio_auditoria.pdf"'}
+        )
     except Exception as e:
         return JSONResponse({"erro": f"Erro ao gerar PDF: {str(e)}"}, status_code=500)
-
-# ---------------------------------------------------------------------------
-# Execução
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    import uvicorn
-
-    def abrir_navegador():
-        time.sleep(2)
-        webbrowser.open("http://localhost:7777")
-
-    print("\n" + "=" * 55)
-    print("  AGENTE DE COORDENAÇÃO E SEGURANÇA AEC")
-    print("  Agno + Claude (Anthropic) + ifcopenshell")
-    print("=" * 55)
-    print("\n  Acesse: http://localhost:7777\n")
-
-    threading.Thread(target=abrir_navegador, daemon=True).start()
-    uvicorn.run(app, host="localhost", port=7777)

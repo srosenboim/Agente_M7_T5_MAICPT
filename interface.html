@@ -65,8 +65,8 @@ body { font-family: 'Geist', system-ui, sans-serif; background: #09090b; color: 
 /* Starters */
 .starters-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; }
 .agno-center { text-align: center; margin-bottom: 40px; }
-.agno-logo-big { width: 80px; height: 80px; background: #f97316; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 800; color: #09090b; margin: 0 auto 16px; box-shadow: 0 0 60px #f9731633; }
-.agno-title { font-size: 32px; font-weight: 700; margin-bottom: 6px; }
+.agno-logo-big { width: 100px; height: 100px; background: #f97316; border-radius: 24px; display: flex; align-items: center; justify-content: center; font-size: 52px; font-weight: 800; color: #09090b; margin: 0 auto 20px; box-shadow: 0 0 80px #f9731655; }
+.agno-title { font-size: 40px; font-weight: 700; margin-bottom: 8px; letter-spacing: -1px; }
 .agno-sub { font-size: 15px; color: #a1a1aa; }
 .starters-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; width: 100%; max-width: 860px; }
 .starter { background: #0f0f10; border: 1px solid #1f1f1f; border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.15s; text-align: left; }
@@ -259,7 +259,9 @@ body { font-family: 'Geist', system-ui, sans-serif; background: #09090b; color: 
         <div class="chat-toolbar-left" id="chatTitulo">Análise Completa</div>
         <div class="chat-toolbar-right">
           <button class="tool-btn blue" onclick="abrirViewer()">🔍 Ver em 3D</button>
-          <button class="tool-btn" onclick="baixarIFC()" id="btnDownload">⬇ Baixar IFC auditado</button>
+          <button class="tool-btn" onclick="baixarPDF()" id="btnPDF">📄 Relatório PDF</button>
+          <button class="tool-btn" onclick="baixarIFC()" id="btnDownload">📐 IFC auditado</button>
+          <button class="tool-btn" onclick="baixarJSON()" id="btnJSON">📊 Dados JSON</button>
           <button class="tool-btn" onclick="voltarMenu()">← Menu</button>
         </div>
       </div>
@@ -308,8 +310,8 @@ body { font-family: 'Geist', system-ui, sans-serif; background: #09090b; color: 
       <div>
         <div class="modal-title">Visualizador 3D — Auditoria BIM</div>
         <div class="modal-legend">
-          <span style="color:#f59e0b">■</span> Clash &nbsp;
-          <span style="color:#ef4444">■</span> Não conforme &nbsp;
+          <span style="color:#ef4444">■</span> Clash &nbsp;
+          <span style="color:#f59e0b">■</span> Não conforme &nbsp;
           <span style="color:#6b7280">■</span> Conforme
         </div>
       </div>
@@ -503,6 +505,9 @@ function processarEvento(ev, toolSteps, resultado, setResultado) {
   } else if (ev.tipo === 'fim') {
     if (!resultado) res.innerHTML = '<div style="color:#71717a;font-size:13px;">Análise concluída.</div>';
     proc.innerHTML += '<div style="font-size:12px;color:#22c55e;margin-top:12px;">✅ Análise concluída</div>';
+    // Salva HTML do relatório para download PDF
+    fetch('/api/salvar-relatorio', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({html: document.getElementById('resultPanel').innerHTML})});
 
   } else if (ev.tipo === 'erro') {
     res.innerHTML = `<div style="color:#f87171;font-size:13px;">Erro: ${ev.msg}</div>`;
@@ -543,6 +548,40 @@ function novaAnalise() {
   document.getElementById('uploadIFC').classList.remove('loaded');
   document.getElementById('listaArquivos').innerHTML = '';
   voltarMenu();
+}
+
+// ── Download PDF ──
+async function baixarPDF() {
+  const btn = document.getElementById('btnPDF');
+  btn.textContent = '⏳ Gerando PDF...'; btn.disabled = true;
+  try {
+    const res = await fetch('/api/download-pdf');
+    if (!res.ok) { const e = await res.json(); alert('Erro: ' + e.erro); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'relatorio_auditoria.pdf';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) { alert('Erro: ' + e.message); }
+  finally { btn.textContent = '📄 Relatório PDF'; btn.disabled = false; }
+}
+
+// ── Download JSON ──
+async function baixarJSON() {
+  const btn = document.getElementById('btnJSON');
+  btn.textContent = '⏳ Gerando...'; btn.disabled = true;
+  try {
+    const res = await fetch('/api/download-json');
+    if (!res.ok) { const e = await res.json(); alert('Erro: ' + e.erro); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'auditoria_dados.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) { alert('Erro: ' + e.message); }
+  finally { btn.textContent = '📊 Dados JSON'; btn.disabled = false; }
 }
 
 // ── Download IFC auditado ──
@@ -599,7 +638,7 @@ function iniciarViewer3D(canvas, elementos) {
   if (viewerAnimId) cancelAnimationFrame(viewerAnimId);
 
   viewerScene = new THREE.Scene();
-  viewerScene.background = new THREE.Color(0x2d2d2d);
+  viewerScene.background = new THREE.Color(0x3a3a3a);
   viewerCamera = new THREE.PerspectiveCamera(45, w/h, 0.01, 1000);
   viewerRenderer = new THREE.WebGLRenderer({canvas, antialias: true});
   viewerRenderer.setSize(w, h);
@@ -611,7 +650,7 @@ function iniciarViewer3D(canvas, elementos) {
   dir.position.set(5, 10, 5);
   viewerScene.add(dir);
 
-  // Centro e escala pelo bounding box total do modelo
+  // Centro e escala pelo bounding box total
   let xmin=Infinity, xmax=-Infinity, ymin=Infinity, ymax=-Infinity, zmin=Infinity, zmax=-Infinity;
   elementos.forEach(el => {
     xmin=Math.min(xmin,el.bbox.xmin); xmax=Math.max(xmax,el.bbox.xmax);
@@ -619,8 +658,9 @@ function iniciarViewer3D(canvas, elementos) {
     zmin=Math.min(zmin,el.bbox.zmin); zmax=Math.max(zmax,el.bbox.zmax);
   });
   viewerTarget = {x:(xmin+xmax)/2, y:(zmin+zmax)/2, z:(ymin+ymax)/2};
-  const modelSize = Math.max(xmax-xmin, ymax-ymin, zmax-zmin);
-  viewerSpherical.radius = modelSize * 1.5;
+  const sizeX = xmax-xmin, sizeY = ymax-ymin, sizeZ = zmax-zmin;
+  const modelSize = Math.max(sizeX, sizeY, sizeZ);
+  viewerSpherical = {theta: Math.PI/4, phi: Math.PI/3, radius: modelSize * 1.2};
 
   elementos.forEach(el => {
     const b = el.bbox;

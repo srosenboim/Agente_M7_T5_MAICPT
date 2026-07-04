@@ -327,7 +327,8 @@ HTML = r"""<!DOCTYPE html>
         </div>
         <span class="chat-header-model">claude-sonnet-4-6</span>
       </div>
-      <button class="reset-link" onclick="resetar()">⚙ Reconfigurar</button>
+      <button class="reset-link" onclick="novaAnalise()">📂 Nova análise</button>
+      <button class="reset-link" onclick="resetar()" style="color:#52525b;">⚙ Reconfigurar</button>
       <div style="display:flex;gap:8px;">
         <button onclick="abrirViewer()" style="font-size:13px;color:#60a5fa;background:#0a1628;border:1px solid #1d4ed8;border-radius:6px;padding:6px 14px;cursor:pointer;font-family:inherit;">
           🔍 Ver em 3D
@@ -494,8 +495,57 @@ function resetar() {
   document.getElementById('chatArea').style.display = 'none';
   novoChat();
 }
+
+function novaAnalise() {
+  document.getElementById('novoIfc').value = '';
+  document.getElementById('novaAnaliseErro').style.display = 'none';
+  document.getElementById('novaAnaliseModal').style.display = 'flex';
+}
+
+function fecharNovaAnalise() {
+  document.getElementById('novaAnaliseModal').style.display = 'none';
+}
+
+async function confirmarNovaAnalise() {
+  const novoIfc = document.getElementById('novoIfc').value.trim() || 'modelo_exemplo.ifc';
+  const erro = document.getElementById('novaAnaliseErro');
+  erro.style.display = 'none';
+  try {
+    const res = await fetch('/api/trocar-ifc', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ifc_path: novoIfc})
+    });
+    const data = await res.json();
+    if (data.erro) { erro.textContent = data.erro; erro.style.display = 'block'; return; }
+    document.getElementById('ifcLabel').textContent = data.ifc;
+    fecharNovaAnalise();
+    novoChat();
+  } catch(e) {
+    erro.textContent = 'Erro ao conectar com o backend.';
+    erro.style.display = 'block';
+  }
+}
 </script>
-<!-- VIEWER 3D MODAL -->
+<!-- MODAL NOVA ANÁLISE -->
+<div id="novaAnaliseModal" style="display:none;position:fixed;inset:0;background:#000000cc;z-index:999;align-items:center;justify-content:center;">
+  <div style="background:#0f0f10;border:1px solid #2a2a2a;border-radius:16px;padding:40px;width:100%;max-width:480px;">
+    <div style="font-size:18px;font-weight:600;margin-bottom:6px;">📂 Nova análise</div>
+    <div style="font-size:14px;color:#71717a;margin-bottom:24px;line-height:1.6;">
+      Informe o caminho do novo arquivo IFC.<br>Sua chave Anthropic será mantida.
+    </div>
+    <div class="field">
+      <label>Arquivo IFC</label>
+      <input type="text" id="novoIfc" placeholder="modelo_exemplo.ifc" />
+      <div class="hint">Deixe em branco para usar o modelo de exemplo incluído sem carregar outro arquivo</div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px;">
+      <button onclick="fecharNovaAnalise()" style="flex:1;background:none;border:1px solid #2a2a2a;border-radius:8px;padding:12px;color:#71717a;font-family:inherit;cursor:pointer;">Cancelar</button>
+      <button onclick="confirmarNovaAnalise()" style="flex:2;background:#f97316;border:none;border-radius:8px;padding:12px;color:#09090b;font-weight:700;font-family:inherit;cursor:pointer;">Carregar novo IFC →</button>
+    </div>
+    <div id="novaAnaliseErro" style="display:none;color:#f85149;font-size:13px;margin-top:12px;"></div>
+  </div>
+</div>
 <div id="viewerModal" style="display:none;position:fixed;inset:0;background:#000000cc;z-index:1000;align-items:center;justify-content:center;">
   <div style="background:#09090b;border:1px solid #1f1f1f;border-radius:16px;width:90vw;max-width:1000px;height:80vh;display:flex;flex-direction:column;overflow:hidden;">
     <div style="padding:16px 24px;border-bottom:1px solid #1f1f1f;display:flex;align-items:center;justify-content:space-between;">
@@ -935,6 +985,32 @@ async def viewer_data():
     except Exception as e:
         return JSONResponse({"erro": str(e)}, status_code=500)
 
+
+
+@app.post("/api/trocar-ifc")
+async def api_trocar_ifc(request: Request):
+    """Troca o arquivo IFC mantendo a chave Anthropic já configurada."""
+    global agente_global, ifc_path_global
+    if agente_global is None:
+        return JSONResponse({"erro": "Agente não inicializado. Configure a chave primeiro."}, status_code=400)
+    data = await request.json()
+    ifc = data.get("ifc_path", "modelo_exemplo.ifc").strip() or "modelo_exemplo.ifc"
+    if not Path(ifc).exists():
+        return JSONResponse({"erro": f"Arquivo IFC não encontrado: {ifc}"}, status_code=400)
+    ifc_path_global = ifc
+    # Atualiza as instruções do agente com o novo caminho do IFC
+    agente_global.instructions = [
+        i if f"arquivo IFC" not in i else f"O arquivo IFC do projeto está em: {ifc}. Use sempre este arquivo nas tools."
+        for i in (agente_global.instructions or [])
+    ]
+    # Atualiza o .env
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        content = env_path.read_text()
+        lines = [l for l in content.splitlines() if not l.startswith("IFC_PATH")]
+        lines.append(f"IFC_PATH={ifc}")
+        env_path.write_text("\n".join(lines) + "\n")
+    return JSONResponse({"status": "ok", "ifc": ifc})
 
 
 @app.get("/api/download-ifc-auditado")

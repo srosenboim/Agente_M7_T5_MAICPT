@@ -544,7 +544,14 @@ async function iniciarViewer() {
   try {
     const res = await fetch('/api/viewer-data');
     const data = await res.json();
-    if (data.erro) { alert(data.erro); return; }
+    if (data.erro) { 
+      document.getElementById('viewerLoading').innerHTML = `<div style="color:#f85149;padding:20px;text-align:center">❌ ${data.erro}</div>`;
+      return; 
+    }
+    if (!data.elementos || data.elementos.length === 0) {
+      document.getElementById('viewerLoading').innerHTML = `<div style="color:#71717a;padding:20px;text-align:center">Nenhum elemento com geometria 3D encontrado no modelo.</div>`;
+      return;
+    }
 
     const canvas = document.getElementById('viewerCanvas');
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -930,6 +937,7 @@ async def viewer_data():
 
 
 
+@app.get("/api/download-ifc-auditado")
 async def download_ifc_auditado():
     """Gera o IFC auditado com cores (clash=amarelo, não conforme=vermelho) e serve para download."""
     if not ifc_path_global or not Path(ifc_path_global).exists():

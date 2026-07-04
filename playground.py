@@ -6,11 +6,14 @@ Framework: Agno | Modelo: Claude Sonnet | BIM: ifcopenshell
 import os, sys, json, webbrowser, threading, time
 from pathlib import Path
 
+# Garante que __file__ funciona em qualquer contexto
+_BASE = Path(__file__).resolve().parent if '__file__' in dir() else Path.cwd()
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-sys.path.append(str(Path(__file__).parent / "skills/seguranca-aec/scripts"))
+sys.path.append(str(_BASE / "skills/seguranca-aec/scripts"))
 
 from detectar_clashes import detectar_clashes
 from verificar_rota_fuga import verificar_rota_fuga
@@ -37,11 +40,11 @@ def todos_ifc():
 # ---------------------------------------------------------------------------
 # HTML
 # ---------------------------------------------------------------------------
-HTML = open(Path(__file__).parent / "interface.html", encoding="utf-8").read() if (Path(__file__).parent / "interface.html").exists() else ""
+HTML = open(_BASE / "interface.html", encoding="utf-8").read() if (_BASE / "interface.html").exists() else ""
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    html_path = Path(__file__).parent / "interface.html"
+    html_path = _BASE / "interface.html"
     return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
 
 # ---------------------------------------------------------------------------
@@ -53,7 +56,7 @@ async def api_status():
         "agente_inicializado": agente_global is not None,
         "ifc_ativo": ifc_ativo(),
         "ifcs": {k: v for k, v in ifc_paths.items() if v},
-        "pasta_projeto": str(Path(__file__).parent),
+        "pasta_projeto": str(_BASE),
     })
 
 # ---------------------------------------------------------------------------
@@ -67,7 +70,7 @@ async def upload_ifc(request: Request):
     if not arquivo:
         return JSONResponse({"erro": "Nenhum arquivo enviado."}, status_code=400)
     import shutil
-    destino = Path(__file__).parent / arquivo.filename
+    destino = _BASE / arquivo.filename
     with open(destino, "wb") as f:
         shutil.copyfileobj(arquivo.file, f)
     ifc_paths[tipo] = str(destino)
@@ -87,7 +90,7 @@ async def api_setup(request: Request):
         return JSONResponse({"erro": "Chave não informada."}, status_code=400)
 
     if usar_exemplo:
-        exemplo = Path(__file__).parent / "modelo_exemplo.ifc"
+        exemplo = _BASE / "modelo_exemplo.ifc"
         if not exemplo.exists():
             return JSONResponse({"erro": "modelo_exemplo.ifc não encontrado na pasta do projeto."}, status_code=400)
         ifc_paths["exemplo"] = str(exemplo)
@@ -105,7 +108,7 @@ async def api_setup(request: Request):
         id="AgenteCoordenacaoSeguranca",
         name="Agente de Coordenação e Segurança AEC",
         model=Claude(id="claude-sonnet-4-6"),
-        skills=Skills(loaders=[LocalSkills(str(Path(__file__).parent / "skills"))]),
+        skills=Skills(loaders=[LocalSkills(str(_BASE / "skills"))]),
         tools=[
             detectar_clashes_instalacoes_estrutura,
             verificar_distancia_rota_fuga,
@@ -130,7 +133,7 @@ async def api_setup(request: Request):
     )
 
     # Salva configuração
-    env_path = Path(__file__).parent / ".env"
+    env_path = _BASE / ".env"
     with open(env_path, "w") as f:
         f.write(f"ANTHROPIC_API_KEY={api_key}\n")
         if ifc_paths.get("exemplo"):
@@ -367,7 +370,7 @@ async def download_ifc_auditado():
     try:
         from colorir_auditoria_ifc import colorir_auditoria
         nome_saida = Path(ifc).stem + "_auditado.ifc"
-        saida_abs = Path(__file__).parent / nome_saida
+        saida_abs = _BASE / nome_saida
         colorir_auditoria(ifc, str(saida_abs))
         if not saida_abs.exists():
             return JSONResponse({"erro": "Falha ao gerar arquivo IFC auditado."}, status_code=500)
@@ -392,7 +395,7 @@ async def api_trocar_ifc(request: Request):
     tipo = data.get("tipo", "exemplo")
     usar_exemplo = data.get("usar_exemplo", False)
     if usar_exemplo:
-        exemplo = Path(__file__).parent / "modelo_exemplo.ifc"
+        exemplo = _BASE / "modelo_exemplo.ifc"
         ifc_paths["exemplo"] = str(exemplo)
         for k in ["arch", "struct", "mep"]:
             ifc_paths[k] = None
@@ -527,7 +530,7 @@ async def download_json():
             "elementos": elementos_problema
         }, indent=2, ensure_ascii=False)
 
-        saida = Path(__file__).parent / "auditoria_dados.json"
+        saida = _BASE / "auditoria_dados.json"
         saida.write_text(output, encoding="utf-8")
         return FileResponse(path=str(saida), filename="auditoria_dados.json",
                            media_type="application/json",
@@ -619,7 +622,7 @@ async def download_pdf():
                 pdf.set_text_color(26, 26, 26)
                 pdf.multi_cell(0, 5, line[:200])
 
-        saida = Path(__file__).parent / "relatorio_auditoria.pdf"
+        saida = _BASE / "relatorio_auditoria.pdf"
         pdf.output(str(saida))
         return FileResponse(
             path=str(saida),

@@ -266,12 +266,17 @@ async def viewer_data():
                     nc_nomes.add(r["porta_apartamento"])
         except: pass
         # Portas com largura abaixo do mínimo (NBR 9050: 0.80m)
+        # Usa escala do modelo para converter para metros
         try:
+            import ifcopenshell.util.unit as _ifc_unit
             model_temp = ifcopenshell.open(ifc)
+            _escala = _ifc_unit.calculate_unit_scale(model_temp)
             for door in model_temp.by_type("IfcDoor"):
                 w = getattr(door, "OverallWidth", None)
-                if w is not None and float(w) < 0.80:
-                    nc_nomes.add(door.Name)
+                if w is not None:
+                    w_metros = float(w) * _escala
+                    if w_metros < 0.80:
+                        nc_nomes.add(door.Name)
         except: pass
         try:
             for r in verificar_sistema_incendio(ifc):

@@ -130,6 +130,8 @@ body { font-family: 'Geist', system-ui, sans-serif; background: #09090b; color: 
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
 @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.cursor-blink { animation: blink 1s infinite; color: #f97316; }
 
 /* Input */
 .input-area { padding: 12px 16px; border-top: 1px solid #1f1f1f; display: flex; gap: 8px; }
@@ -465,7 +467,10 @@ function processarEvento(ev, toolSteps, resultado, setResultado) {
   const res = document.getElementById('resultPanel');
 
   if (ev.tipo === 'inicio') {
-    proc.innerHTML = '<div style="font-size:12px;color:#52525b;margin-bottom:12px;">Agente iniciado — aguardando tools...</div>';
+    proc.innerHTML = '<div style="font-size:12px;color:#f97316;margin-bottom:12px;font-family:monospace;">▶ Agente Agno iniciado<span class="cursor-blink">▋</span></div>';
+
+  } else if (ev.tipo === 'formatando') {
+    proc.innerHTML += '<div style="margin-top:12px;font-size:12px;color:#60a5fa;font-family:monospace;">🤖 Claude formatando relatório<span class="cursor-blink">▋</span></div>';
 
   } else if (ev.tipo === 'tool_inicio') {
     const id = 'step_' + ev.tool.replace(/[^a-z]/gi,'_');
@@ -473,16 +478,51 @@ function processarEvento(ev, toolSteps, resultado, setResultado) {
     const div = document.createElement('div');
     div.className = 'process-step'; div.id = id;
     const nomes = {
-      'detectar_clashes_instalacoes_estrutura': '🔧 Detectando clashes geométricos...',
-      'verificar_distancia_rota_fuga': '🚪 Verificando rota de fuga...',
-      'verificar_sistema_incendio_completo': '🔥 Verificando sistema de incêndio...'
+      'detectar_clashes_instalacoes_estrutura': 'Detectando clashes geométricos',
+      'verificar_distancia_rota_fuga': 'Verificando rota de fuga',
+      'verificar_sistema_incendio_completo': 'Verificando sistema de incêndio'
+    };
+    const icons = {
+      'detectar_clashes_instalacoes_estrutura': '🔧',
+      'verificar_distancia_rota_fuga': '🚪',
+      'verificar_sistema_incendio_completo': '🔥'
     };
     div.innerHTML = `<div class="step-header">
       <div class="step-icon running">⚡</div>
-      <div class="step-name running">${nomes[ev.tool] || ev.tool}</div>
+      <div>
+        <div class="step-name running">${icons[ev.tool]||'⚙'} ${nomes[ev.tool] || ev.tool}</div>
+        <div style="font-size:11px;color:#52525b;font-family:'Geist Mono',monospace;margin-top:3px;">
+          Chamando ifcopenshell...
+          <span class="cursor-blink">▋</span>
+        </div>
+      </div>
     </div>`;
     proc.appendChild(div);
     proc.scrollTop = proc.scrollHeight;
+
+  } else if (ev.tipo === 'progresso') {
+    // Add line by line to the current running step
+    const id = toolSteps[ev.tool];
+    if (id) {
+      const div = document.getElementById(id);
+      if (div) {
+        let progressDiv = div.querySelector('.progress-lines');
+        if (!progressDiv) {
+          progressDiv = document.createElement('div');
+          progressDiv.className = 'progress-lines';
+          progressDiv.style.cssText = 'font-family:Geist Mono,monospace;font-size:11px;color:#52525b;margin-top:4px;padding:6px 8px;background:#0f0f10;border-radius:4px;border:1px solid #1f1f1f;';
+          div.appendChild(progressDiv);
+        }
+        const line = document.createElement('div');
+        line.style.cssText = 'margin:2px 0;';
+        line.innerHTML = `<span style="color:#f97316">></span> ${ev.linha}<span class="cursor-blink">▋</span>`;
+        progressDiv.appendChild(line);
+        // Remove cursor from previous line
+        const prevLines = progressDiv.querySelectorAll('.cursor-blink');
+        prevLines.forEach((el, i) => { if (i < prevLines.length - 1) el.remove(); });
+        proc.scrollTop = proc.scrollHeight;
+      }
+    }
 
   } else if (ev.tipo === 'tool_fim') {
     const id = toolSteps[ev.tool];
@@ -494,12 +534,26 @@ function processarEvento(ev, toolSteps, resultado, setResultado) {
           'verificar_distancia_rota_fuga': '🚪 Rota de fuga verificada',
           'verificar_sistema_incendio_completo': '🔥 Sistema de incêndio verificado'
         };
+        const resultDiv = document.createElement('div');
+        resultDiv.className = 'step-result';
         div.innerHTML = `<div class="step-header">
           <div class="step-icon done">✓</div>
           <div class="step-name done">${nomes[ev.tool] || ev.tool}</div>
-        </div>
-        <div class="step-result">${ev.resultado || ''}</div>`;
+        </div>`;
+        div.appendChild(resultDiv);
         proc.scrollTop = proc.scrollHeight;
+        // Animate result text character by character
+        const texto = ev.resultado || '';
+        let i = 0;
+        const intervalo = setInterval(() => {
+          if (i < texto.length) {
+            resultDiv.textContent += texto[i];
+            i++;
+            proc.scrollTop = proc.scrollHeight;
+          } else {
+            clearInterval(intervalo);
+          }
+        }, 8);
       }
     }
 
@@ -515,6 +569,7 @@ function processarEvento(ev, toolSteps, resultado, setResultado) {
     // Salva HTML do relatório para download PDF
     fetch('/api/salvar-relatorio', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({html: document.getElementById('resultPanel').innerHTML})});
+    proc.innerHTML += '<div style="font-size:11px;color:#52525b;margin-top:8px;font-family:monospace;">📊 Dados enviados para formatação</div>';
 
   } else if (ev.tipo === 'erro') {
     res.innerHTML = `<div style="color:#f87171;font-size:13px;">Erro: ${ev.msg}</div>`;
@@ -557,19 +612,17 @@ function novaAnalise() {
   voltarMenu();
 }
 
-// ── Download PDF ──
+// ── Download PDF — abre em nova aba para impressão ──
 async function baixarPDF() {
   const btn = document.getElementById('btnPDF');
-  btn.textContent = '⏳ Gerando PDF...'; btn.disabled = true;
+  btn.textContent = '⏳ Gerando...'; btn.disabled = true;
   try {
     const res = await fetch('/api/download-pdf');
     if (!res.ok) { const e = await res.json(); alert('Erro: ' + e.erro); return; }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'relatorio_auditoria.pdf';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   } catch(e) { alert('Erro: ' + e.message); }
   finally { btn.textContent = '📄 Relatório PDF'; btn.disabled = false; }
 }

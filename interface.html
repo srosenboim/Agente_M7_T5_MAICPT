@@ -256,7 +256,13 @@ body { font-family: 'Geist', system-ui, sans-serif; background: #09090b; color: 
     <!-- CHAT -->
     <div class="chat-area" id="chatArea">
       <div class="chat-toolbar">
-        <div class="chat-toolbar-left" id="chatTitulo">Análise Completa</div>
+        <div class="chat-toolbar-left" style="display:flex;align-items:center;gap:10px;">
+          <div style="width:28px;height:28px;background:#f97316;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#09090b;flex-shrink:0;">F</div>
+          <div>
+            <div style="font-size:11px;color:#f97316;font-weight:700;line-height:1;">AGNO</div>
+            <div id="chatTitulo" style="font-size:13px;font-weight:600;">Análise Completa</div>
+          </div>
+        </div>
         <div class="chat-toolbar-right">
           <button class="tool-btn blue" onclick="abrirViewer()">🔍 Ver em 3D</button>
           <button class="tool-btn" onclick="baixarPDF()" id="btnPDF">📄 Relatório PDF</button>
@@ -312,7 +318,8 @@ body { font-family: 'Geist', system-ui, sans-serif; background: #09090b; color: 
         <div class="modal-legend">
           <span style="color:#ef4444">■</span> Clash &nbsp;
           <span style="color:#f59e0b">■</span> Não conforme &nbsp;
-          <span style="color:#6b7280">■</span> Conforme
+          <span style="color:#6b7280">■</span> Conforme &nbsp;|&nbsp;
+          <span style="color:#52525b">Botão esq: girar · Botão dir: mover · Scroll: zoom</span>
         </div>
       </div>
       <button class="modal-close" onclick="fecharViewer()">✕</button>
@@ -686,16 +693,34 @@ function iniciarViewer3D(canvas, elementos) {
   function animar() { viewerAnimId = requestAnimationFrame(animar); viewerRenderer.render(viewerScene, viewerCamera); }
   animar();
 
-  canvas.addEventListener('mousedown', e => { isDragging=true; lastMouse={x:e.clientX, y:e.clientY}; });
-  canvas.addEventListener('mouseup', () => isDragging=false);
-  canvas.addEventListener('mousemove', e => {
-    if (!isDragging) return;
-    viewerSpherical.theta -= (e.clientX-lastMouse.x)*0.01;
-    viewerSpherical.phi = Math.max(0.1, Math.min(Math.PI-0.1, viewerSpherical.phi-(e.clientY-lastMouse.y)*0.01));
-    lastMouse = {x:e.clientX, y:e.clientY};
-    atualizarCamera();
+  let isPanning = false;
+  canvas.addEventListener('mousedown', e => {
+    if (e.button === 2 || e.button === 1) { isPanning=true; }
+    else { isDragging=true; }
+    lastMouse={x:e.clientX, y:e.clientY};
   });
-  canvas.addEventListener('wheel', e => { viewerSpherical.radius = Math.max(1, viewerSpherical.radius+e.deltaY*0.01); atualizarCamera(); });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('mouseup', () => { isDragging=false; isPanning=false; });
+  canvas.addEventListener('mousemove', e => {
+    const dx = e.clientX-lastMouse.x, dy = e.clientY-lastMouse.y;
+    if (isPanning) {
+      // Pan — move target
+      const panSpeed = viewerSpherical.radius * 0.001;
+      viewerTarget.x -= dx * panSpeed;
+      viewerTarget.y += dy * panSpeed;
+      atualizarCamera();
+    } else if (isDragging) {
+      viewerSpherical.theta -= dx*0.01;
+      viewerSpherical.phi = Math.max(0.1, Math.min(Math.PI-0.1, viewerSpherical.phi-dy*0.01));
+      atualizarCamera();
+    }
+    lastMouse = {x:e.clientX, y:e.clientY};
+  });
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    viewerSpherical.radius = Math.max(0.5, viewerSpherical.radius+e.deltaY*0.005);
+    atualizarCamera();
+  }, {passive:false});
 }
 
 function atualizarCamera() {

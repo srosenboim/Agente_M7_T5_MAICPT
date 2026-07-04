@@ -143,65 +143,79 @@ async def api_setup(request: Request):
 # ---------------------------------------------------------------------------
 @app.post("/api/stream-verificar")
 async def stream_verificar(request: Request):
-    """SSE — transmite o agente pensando + resultado em tempo real."""
+    """SSE — roda scripts diretamente e transmite progresso em tempo real."""
     if agente_global is None:
         return JSONResponse({"erro": "Agente não inicializado."}, status_code=400)
     data = await request.json()
     tipo = data.get("tipo", "d")
 
-    mensagens = {
-        "a": "Use a tool 'detectar_clashes_instalacoes_estrutura' para detectar todos os clashes geométricos no modelo IFC carregado.",
-        "b": "Use a tool 'verificar_distancia_rota_fuga' para verificar a rota de fuga do modelo IFC carregado.",
-        "c": "Use a tool 'verificar_sistema_incendio_completo' para verificar o sistema de incêndio (extintores e sprinklers) do modelo IFC carregado.",
-        "d": "Use as três tools em sequência: 'detectar_clashes_instalacoes_estrutura', depois 'verificar_distancia_rota_fuga', depois 'verificar_sistema_incendio_completo'. Apresente relatório completo com tabelas e resumo executivo.",
-    }
-
-    from agno.run.agent import RunEvent
-
     async def gerar_eventos():
+        import anthropic
+        resultados = {}
+
         try:
             yield f"data: {json.dumps({'tipo': 'inicio', 'msg': 'Agente iniciado...'})}\n\n"
 
-            conteudo_final = ""
+            # Roda scripts diretamente — garante dados reais
+            if tipo in ("a", "d"):
+                yield f"data: {json.dumps({'tipo': 'tool_inicio', 'tool': 'detectar_clashes_instalacoes_estrutura'})}\n\n"
+                resultado_a = detectar_clashes_instalacoes_estrutura()
+                resultados["clashes"] = resultado_a
+                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'detectar_clashes_instalacoes_estrutura', 'resultado': resultado_a[:300]})}\n\n"
 
-            for evento in agente_global.run(mensagens.get(tipo, mensagens["d"]), stream=True, stream_events=True):
-                ev = evento.event if hasattr(evento, 'event') else None
+            if tipo in ("b", "d"):
+                yield f"data: {json.dumps({'tipo': 'tool_inicio', 'tool': 'verificar_distancia_rota_fuga'})}\n\n"
+                resultado_b = verificar_distancia_rota_fuga()
+                resultados["rota_fuga"] = resultado_b
+                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'verificar_distancia_rota_fuga', 'resultado': resultado_b[:300]})}\n\n"
 
-                if ev == RunEvent.tool_call_started:
-                    tool_name = getattr(evento, 'tool_name', '') or getattr(evento, 'tool', {})
-                    if hasattr(tool_name, 'get'):
-                        tool_name = tool_name.get('name', 'tool')
-                    yield f"data: {json.dumps({'tipo': 'tool_inicio', 'tool': str(tool_name)})}\n\n"
+            if tipo in ("c", "d"):
+                yield f"data: {json.dumps({'tipo': 'tool_inicio', 'tool': 'verificar_sistema_incendio_completo'})}\n\n"
+                resultado_c = verificar_sistema_incendio_completo()
+                resultados["sistema_incendio"] = resultado_c
+                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'verificar_sistema_incendio_completo', 'resultado': resultado_c[:300]})}\n\n"
 
-                elif ev == RunEvent.tool_call_completed:
-                    tool_name = getattr(evento, 'tool_name', '') or ''
-                    tool_result = ''
-                    if hasattr(evento, 'content'):
-                        tool_result = str(evento.content)[:500]
-                    yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': str(tool_name), 'resultado': tool_result})}\n\n"
+            # Manda dados reais para Claude formatar
+            yield f"data: {json.dumps({'tipo': 'formatando', 'msg': 'Claude formatando relatório...'})}\n\n"
 
-                elif ev == RunEvent.run_content:
-                    delta = ''
-                    if hasattr(evento, 'content') and evento.content:
-                        delta = str(evento.content)
-                    elif hasattr(evento, 'delta') and evento.delta:
-                        delta = str(evento.delta)
-                    if delta:
-                        conteudo_final += delta
-                        yield f"data: {json.dumps({'tipo': 'conteudo', 'delta': delta})}\n\n"
+            titulos = {
+                "a": "Clashes Geométricos",
+                "b": "Rota de Fuga (NBR 9077)",
+                "c": "Sistema de Incêndio (NBR 12693 / NBR 10897)",
+                "d": "Auditoria Completa"
+            }
 
-                elif ev == RunEvent.run_completed:
-                    if not conteudo_final and hasattr(evento, 'content') and evento.content:
-                        conteudo_final = evento.get_content_as_string() if hasattr(evento, 'get_content_as_string') else str(evento.content)
-                        yield f"data: {json.dumps({'tipo': 'conteudo', 'delta': conteudo_final})}\n\n"
-                    yield f"data: {json.dumps({'tipo': 'fim'})}\n\n"
-                    return
+            dados_texto = "\n\n".join([f"**{k}:**\n{v}" for k, v in resultados.items()])
+            prompt = f"""Com base nos dados reais obtidos pelo ifcopenshell do modelo IFC, elabore um relatório técnico profissional em português.
+
+DADOS REAIS DO MODELO IFC:
+{dados_texto}
+
+Apresente em markdown com tabelas, separando conformes de não conformes.
+Use os nomes EXATOS dos elementos retornados pelos dados acima.
+Inclua um resumo executivo no final.
+Sprinklers: verificação por cobertura de área (m²/cabeça), não por distância."""
+
+            # Streaming do Claude via anthropic direto
+            client = anthropic.Anthropic()
+            with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}]
+            ) as stream:
+                for text in stream.text_stream:
+                    yield f"data: {json.dumps({'tipo': 'conteudo', 'delta': text})}\n\n"
+
+            yield f"data: {json.dumps({'tipo': 'fim'})}\n\n"
 
         except Exception as e:
             yield f"data: {json.dumps({'tipo': 'erro', 'msg': str(e)})}\n\n"
 
-    return StreamingResponse(gerar_eventos(), media_type="text/event-stream",
-                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return StreamingResponse(
+        gerar_eventos(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
 
 # ---------------------------------------------------------------------------
 # Chat livre (sem streaming)

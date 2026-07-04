@@ -290,9 +290,9 @@ async def viewer_data():
                 xs, ys, zs = v[0::3], v[1::3], v[2::3]
                 nome = el.Name or el.is_a()
                 if nome in clash_nomes:
-                    cor, status = "#f59e0b", "CLASH"
+                    cor, status = "#ef4444", "CLASH"
                 elif nome in nc_nomes:
-                    cor, status = "#ef4444", "NÃO CONFORME"
+                    cor, status = "#f59e0b", "NÃO CONFORME"
                 else:
                     cor, status = "#6b7280", "OK"
                 elementos.append({
@@ -412,6 +412,139 @@ def verificar_sistema_incendio_completo() -> str:
         return f"Arquivo analisado: {Path(ifc).name}\n" + "\n".join(linhas)
     except Exception as e:
         return f"Erro ao verificar sistema de incêndio: {str(e)}"
+
+
+# ---------------------------------------------------------------------------
+# Download JSON — dados brutos dos elementos com problema
+# ---------------------------------------------------------------------------
+@app.get("/api/download-json")
+async def download_json():
+    ifc = ifc_ativo()
+    if not ifc:
+        return JSONResponse({"erro": "Nenhum arquivo IFC carregado."}, status_code=400)
+    try:
+        import ifcopenshell.geom
+        import ifcopenshell.util.unit as ifc_unit
+
+        model = ifcopenshell.open(ifc)
+        escala = ifc_unit.calculate_unit_scale(model)
+        settings = ifcopenshell.geom.settings()
+        settings.set("use-world-coords", True)
+
+        clash_nomes, nc_nomes = set(), set()
+        try:
+            for c in detectar_clashes(ifc):
+                clash_nomes.add(c["elemento_a"]["nome"])
+                clash_nomes.add(c["elemento_b"]["nome"])
+        except: pass
+        try:
+            for r in verificar_rota_fuga(ifc):
+                if not r.get("conforme") and "porta_apartamento" in r:
+                    nc_nomes.add(r["porta_apartamento"])
+        except: pass
+        try:
+            for r in verificar_sistema_incendio(ifc):
+                if not r.get("conforme"):
+                    porta = r.get("porta") or r.get("porta_apartamento")
+                    if porta: nc_nomes.add(porta)
+        except: pass
+        try:
+            model_temp = ifcopenshell.open(ifc)
+            for door in model_temp.by_type("IfcDoor"):
+                w = getattr(door, "OverallWidth", None)
+                if w is not None and float(w) < 0.80:
+                    nc_nomes.add(door.Name)
+        except: pass
+
+        elementos_problema = []
+        for el in model.by_type("IfcProduct"):
+            nome = el.Name or el.is_a()
+            if nome in clash_nomes:
+                elementos_problema.append({
+                    "nome": nome, "classe": el.is_a(),
+                    "cor": "vermelho", "status": "CLASH",
+                    "motivo": "Interferência geométrica com outro elemento"
+                })
+            elif nome in nc_nomes:
+                elementos_problema.append({
+                    "nome": nome, "classe": el.is_a(),
+                    "cor": "amarelo", "status": "NÃO CONFORME",
+                    "motivo": "Elemento não atende critério normativo"
+                })
+
+        output = json.dumps({
+            "arquivo_ifc": Path(ifc).name,
+            "total_problemas": len(elementos_problema),
+            "elementos": elementos_problema
+        }, indent=2, ensure_ascii=False)
+
+        saida = Path(__file__).parent / "auditoria_dados.json"
+        saida.write_text(output, encoding="utf-8")
+        return FileResponse(path=str(saida), filename="auditoria_dados.json",
+                           media_type="application/json",
+                           headers={"Content-Disposition": 'attachment; filename="auditoria_dados.json"'})
+    except Exception as e:
+        return JSONResponse({"erro": str(e)}, status_code=500)
+
+
+# ---------------------------------------------------------------------------
+# Download PDF — relatório formatado
+# ---------------------------------------------------------------------------
+relatorio_html_global = ""
+
+@app.post("/api/salvar-relatorio")
+async def salvar_relatorio(request: Request):
+    """Salva o conteúdo HTML do relatório para download posterior."""
+    global relatorio_html_global
+    data = await request.json()
+    relatorio_html_global = data.get("html", "")
+    return JSONResponse({"status": "ok"})
+
+@app.get("/api/download-pdf")
+async def download_pdf():
+    global relatorio_html_global
+    if not relatorio_html_global:
+        return JSONResponse({"erro": "Nenhum relatório gerado ainda. Execute uma análise primeiro."}, status_code=400)
+    try:
+        from weasyprint import HTML as WH, CSS
+        ifc_nome = Path(ifc_ativo() or "modelo").name if ifc_ativo() else "modelo"
+        html_completo = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<style>
+  body {{ font-family: Arial, sans-serif; font-size: 12px; color: #1a1a1a; margin: 40px; }}
+  h1 {{ font-size: 18px; color: #1a1a1a; border-bottom: 2px solid #f97316; padding-bottom: 8px; }}
+  h2 {{ font-size: 15px; color: #c2410c; margin-top: 20px; }}
+  h3 {{ font-size: 13px; color: #1d4ed8; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11px; }}
+  th {{ background: #f3f4f6; padding: 6px 10px; text-align: left; border: 1px solid #d1d5db; }}
+  td {{ padding: 6px 10px; border: 1px solid #e5e7eb; }}
+  tr:nth-child(even) td {{ background: #f9fafb; }}
+  p {{ margin: 6px 0; line-height: 1.5; }}
+  ul, ol {{ padding-left: 20px; margin: 6px 0; }}
+  li {{ margin: 3px 0; }}
+  code {{ background: #f3f4f6; padding: 1px 4px; border-radius: 3px; font-size: 10px; }}
+  .header {{ background: #1a1a1a; color: white; padding: 16px; margin: -40px -40px 20px; }}
+  .header h1 {{ color: white; border: none; }}
+  .header p {{ color: #a1a1aa; font-size: 11px; margin: 4px 0 0; }}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🏗 Relatório de Auditoria BIM — Coordenação e Segurança AEC</h1>
+  <p>Arquivo: {ifc_nome} | Agno + Claude Sonnet 4.6 + ifcopenshell</p>
+</div>
+{relatorio_html_global}
+</body>
+</html>"""
+        saida = Path(__file__).parent / "relatorio_auditoria.pdf"
+        WH(string=html_completo).write_pdf(str(saida))
+        return FileResponse(path=str(saida), filename="relatorio_auditoria.pdf",
+                           media_type="application/pdf",
+                           headers={"Content-Disposition": 'attachment; filename="relatorio_auditoria.pdf"'})
+    except Exception as e:
+        return JSONResponse({"erro": f"Erro ao gerar PDF: {str(e)}"}, status_code=500)
 
 # ---------------------------------------------------------------------------
 # Execução

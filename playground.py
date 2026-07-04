@@ -814,33 +814,18 @@ async def api_setup(request: Request):
         ],
         instructions=[
             "Você é um assistente técnico de arquitetura especializado em "
-            "compatibilização de projetos BIM e segurança contra incêndio e queda.",
+            "compatibilização de projetos BIM e segurança contra incêndio.",
             "Use a skill 'seguranca-aec' como referência normativa.",
-            f"O arquivo IFC do projeto está em: {ifc}. Use sempre este arquivo nas tools.",
-
-            # Regras rígidas de apresentação
-            "REGRA 1 — Sempre chame as tools para obter dados reais. NUNCA invente valores.",
-            "REGRA 2 — Para clashes: use 'detectar_clashes_instalacoes_estrutura'. "
-            "Liste SOMENTE os pares de elementos em conflito. Não mencione portas nesta seção.",
-            "REGRA 3 — Para rota de fuga: use 'verificar_distancia_rota_fuga'. "
-            "Apresente uma tabela com: Porta de Apartamento | Porta Corta-Fogo | Distância (m) | Limite (m) | Status.",
-            "REGRA 4 — Para sistema de incêndio: use 'verificar_sistema_incendio_completo'. "
-            "Separe CLARAMENTE em duas subseções: "
-            "4.1 Extintores — tabela com Porta | Extintor mais próximo | Distância (m) | Raio (m) | Status. "
-            "4.2 Sprinklers — apresente: quantidade de sprinklers, área estimada do pavimento, "
-            "área por cabeça (m²/cabeça), limite NBR 10897 e status de conformidade. "
-            "NÃO calcule distância de sprinkler até porta — sprinklers são verificados por COBERTURA DE ÁREA.",
-            "REGRA 5 — Na análise completa (tipo D), execute as TRÊS verificações em sequência "
-            "e apresente nesta ordem exata: "
-            "1) Clashes, 2) Rota de Fuga, 3.1) Extintores, 3.2) Sprinklers, 4) Resumo Executivo.",
-            "REGRA 6 — O Resumo Executivo deve ser uma tabela com: "
-            "Verificação | Não Conformidades | Status Geral.",
-            "REGRA 7 — Não confunda portas de apartamento com porta corta-fogo da escada. "
-            "A porta corta-fogo é o DESTINO da rota de fuga, não o ponto de partida.",
-            "REGRA 9 — NUNCA renomeie elementos. Use SEMPRE o nome exato retornado pela tool. "
-            "Se a tool retorna 'Porta Apto 101', escreva 'Porta Apto 101' na tabela. "
-            "Nunca substitua por 'Ponto 1', 'Ponto A', 'Unidade 1' ou qualquer outro nome genérico.",
-            "REGRA 10 — Responda em português, de forma técnica e objetiva, com tabelas markdown.",
+            "IMPORTANTE: Você tem acesso a tools que leem dados reais de um modelo IFC. "
+            "SEMPRE chame as tools para obter os dados — nunca invente ou estime valores. "
+            "Sem chamar as tools, você não tem como saber o que está no modelo.",
+            "Para clashes, chame 'detectar_clashes_instalacoes_estrutura'.",
+            "Para rota de fuga, chame 'verificar_distancia_rota_fuga'.",
+            "Para extintores e sprinklers, chame 'verificar_sistema_incendio_completo'.",
+            "Para análise completa, chame as TRÊS tools em sequência.",
+            "Apresente os resultados em português com tabelas markdown.",
+            "Use os nomes EXATOS retornados pelas tools — nunca renomeie elementos.",
+            "Sprinklers são verificados por cobertura de área, não por distância até portas.",
         ],
         markdown=True,
         debug_mode=False,
@@ -862,10 +847,10 @@ async def api_verificar(request: Request):
     tipo = data.get("tipo", "d")
 
     mensagens = {
-        "a": f"Detecte todos os clashes geométricos no arquivo {ifc_path_global}. Apresente separado por tipo: estrutura x instalação e instalação x instalação entre disciplinas diferentes.",
-        "b": f"Verifique a rota de fuga no arquivo {ifc_path_global}. Calcule a distância de cada porta até a porta corta-fogo da escada e compare com o limite da NBR 9077.",
-        "c": f"Verifique o sistema de incêndio no arquivo {ifc_path_global}. Analise a cobertura de extintores (NBR 12693) e sprinklers (NBR 10897) em relação às portas do pavimento.",
-        "d": f"Faça uma auditoria completa do arquivo {ifc_path_global}. Execute as TRÊS verificações: clashes geométricos, rota de fuga e sistema de incêndio (extintores + sprinklers). Apresente relatório completo com tabelas e resumo executivo.",
+        "a": "Detecte todos os clashes geométricos no modelo IFC carregado. Use a tool 'detectar_clashes_instalacoes_estrutura'.",
+        "b": "Verifique a rota de fuga do modelo IFC carregado. Use a tool 'verificar_distancia_rota_fuga'.",
+        "c": "Verifique o sistema de incêndio do modelo IFC carregado. Use a tool 'verificar_sistema_incendio_completo'.",
+        "d": "Faça uma auditoria completa do modelo IFC carregado. Use as três tools em sequência: 'detectar_clashes_instalacoes_estrutura', 'verificar_distancia_rota_fuga' e 'verificar_sistema_incendio_completo'. Apresente relatório completo.",
     }
 
     try:
@@ -880,30 +865,28 @@ async def api_verificar(request: Request):
 # Tools
 # ---------------------------------------------------------------------------
 
-def detectar_clashes_instalacoes_estrutura(caminho_ifc: str) -> str:
+def detectar_clashes_instalacoes_estrutura() -> str:
     """Detecta clashes geométricos reais (bounding box 3D) entre todas as
-    disciplinas de instalações entre si e com a estrutura.
-    Args:
-        caminho_ifc: caminho para o arquivo .ifc.
+    disciplinas de instalações entre si e com a estrutura no modelo IFC carregado.
+    Não requer parâmetros — usa o modelo IFC configurado no sistema.
     """
-    clashes = detectar_clashes(caminho_ifc)
+    clashes = detectar_clashes(ifc_path_global)
     if not clashes:
-        return "Nenhum clash encontrado."
+        return "Nenhum clash encontrado no modelo."
     linhas = []
     for c in clashes:
         a, b = c["elemento_a"], c["elemento_b"]
         rotulo = "ESTRUTURA x INSTALAÇÃO" if c["tipo"] == "instalacao_x_estrutura" else "INSTALAÇÃO x INSTALAÇÃO"
         linhas.append(f"[{rotulo}] {a['disciplina']} '{a['nome']}' x {b['disciplina']} '{b['nome']}'")
-    return f"{len(clashes)} clash(es):\n" + "\n".join(linhas)
+    return f"{len(clashes)} clash(es) encontrado(s) no modelo:\n" + "\n".join(linhas)
 
 
-def verificar_distancia_rota_fuga(caminho_ifc: str) -> str:
+def verificar_distancia_rota_fuga() -> str:
     """Verifica distância real entre portas de apartamento e porta corta-fogo
-    da escada de incêndio, usando PredefinedType nativo do IFC (NBR 9077).
-    Args:
-        caminho_ifc: caminho para o arquivo .ifc.
+    da escada de incêndio no modelo IFC carregado (NBR 9077).
+    Não requer parâmetros — usa o modelo IFC configurado no sistema.
     """
-    resultados = verificar_rota_fuga(caminho_ifc)
+    resultados = verificar_rota_fuga(ifc_path_global)
     if resultados and "erro" in resultados[0]:
         return resultados[0]["erro"]
     return "\n".join([
@@ -912,13 +895,12 @@ def verificar_distancia_rota_fuga(caminho_ifc: str) -> str:
     ])
 
 
-def verificar_sistema_incendio_completo(caminho_ifc: str) -> str:
-    """Verifica cobertura de extintores e sprinklers usando IfcFireSuppressionTerminal
-    nativo do IFC, calculando distância até as portas do pavimento.
-    Args:
-        caminho_ifc: caminho para o arquivo .ifc.
+def verificar_sistema_incendio_completo() -> str:
+    """Verifica cobertura de extintores (raio de alcance, NBR 12693) e
+    sprinklers (densidade de área por cabeça, NBR 10897) no modelo IFC carregado.
+    Não requer parâmetros — usa o modelo IFC configurado no sistema.
     """
-    resultados = verificar_sistema_incendio(caminho_ifc)
+    resultados = verificar_sistema_incendio(ifc_path_global)
     if resultados and "erro" in resultados[0]:
         return resultados[0]["erro"]
     return "\n".join([

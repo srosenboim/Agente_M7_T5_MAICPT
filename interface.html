@@ -599,7 +599,7 @@ function iniciarViewer3D(canvas, elementos) {
   if (viewerAnimId) cancelAnimationFrame(viewerAnimId);
 
   viewerScene = new THREE.Scene();
-  viewerScene.background = new THREE.Color(0x09090b);
+  viewerScene.background = new THREE.Color(0x2d2d2d);
   viewerCamera = new THREE.PerspectiveCamera(45, w/h, 0.01, 1000);
   viewerRenderer = new THREE.WebGLRenderer({canvas, antialias: true});
   viewerRenderer.setSize(w, h);
@@ -611,15 +611,16 @@ function iniciarViewer3D(canvas, elementos) {
   dir.position.set(5, 10, 5);
   viewerScene.add(dir);
 
-  // Centro
-  let cx=0, cy=0, cz=0;
+  // Centro e escala pelo bounding box total do modelo
+  let xmin=Infinity, xmax=-Infinity, ymin=Infinity, ymax=-Infinity, zmin=Infinity, zmax=-Infinity;
   elementos.forEach(el => {
-    cx += (el.bbox.xmin+el.bbox.xmax)/2;
-    cy += (el.bbox.zmin+el.bbox.zmax)/2;
-    cz += (el.bbox.ymin+el.bbox.ymax)/2;
+    xmin=Math.min(xmin,el.bbox.xmin); xmax=Math.max(xmax,el.bbox.xmax);
+    ymin=Math.min(ymin,el.bbox.ymin); ymax=Math.max(ymax,el.bbox.ymax);
+    zmin=Math.min(zmin,el.bbox.zmin); zmax=Math.max(zmax,el.bbox.zmax);
   });
-  const n = elementos.length;
-  viewerTarget = {x:cx/n, y:cy/n, z:cz/n};
+  viewerTarget = {x:(xmin+xmax)/2, y:(zmin+zmax)/2, z:(ymin+ymax)/2};
+  const modelSize = Math.max(xmax-xmin, ymax-ymin, zmax-zmin);
+  viewerSpherical.radius = modelSize * 1.5;
 
   elementos.forEach(el => {
     const b = el.bbox;

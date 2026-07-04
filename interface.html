@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agente de Coordenação e Segurança AEC</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Geist', system-ui, sans-serif; background: #09090b; color: #fafafa; min-height: 100vh; }
+
+/* ── HEADER ── */
+.header { background: #09090b; border-bottom: 1px solid #1f1f1f; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; }
+.header-left { display: flex; align-items: center; gap: 12px; }
+.logo { width: 36px; height: 36px; background: #f97316; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; color: #09090b; }
+.header-title { font-size: 15px; font-weight: 600; }
+.header-sub { font-size: 12px; color: #52525b; }
+.header-badges { display: flex; gap: 8px; }
+.badge { background: #1c1c1e; border: 1px solid #2a2a2a; border-radius: 20px; padding: 3px 10px; font-size: 11px; color: #a1a1aa; }
+.badge.orange { border-color: #f97316; color: #f97316; }
+
+/* ── LAYOUT ── */
+.app { display: flex; height: calc(100vh - 57px); }
+
+/* ── SIDEBAR ── */
+.sidebar { width: 280px; border-right: 1px solid #1f1f1f; display: flex; flex-direction: column; padding: 16px; gap: 16px; overflow-y: auto; }
+.sidebar-section { }
+.sidebar-label { font-size: 10px; font-weight: 600; color: #3f3f46; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.ifc-upload { background: #0f0f10; border: 1px dashed #2a2a2a; border-radius: 10px; padding: 12px; cursor: pointer; transition: all 0.15s; position: relative; }
+.ifc-upload:hover { border-color: #f97316; background: #1a0f05; }
+.ifc-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.ifc-upload-icon { font-size: 20px; margin-bottom: 4px; }
+.ifc-upload-label { font-size: 12px; font-weight: 600; color: #a1a1aa; }
+.ifc-upload-sub { font-size: 11px; color: #3f3f46; margin-top: 2px; }
+.ifc-upload.loaded { border-color: #22c55e; border-style: solid; background: #0a150a; }
+.ifc-upload.loaded .ifc-upload-label { color: #22c55e; }
+.ifc-upload-filename { font-size: 10px; color: #22c55e; margin-top: 4px; word-break: break-all; }
+
+.ou-divider { text-align: center; font-size: 11px; color: #3f3f46; margin: 8px 0; }
+.btn-exemplo { width: 100%; background: #1c1c1e; border: 1px solid #2a2a2a; border-radius: 8px; padding: 10px; font-size: 12px; color: #a1a1aa; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.btn-exemplo:hover { border-color: #f97316; color: #f97316; }
+.btn-exemplo.ativo { border-color: #22c55e; color: #22c55e; background: #0a150a; }
+
+.api-field input { width: 100%; background: #0f0f10; border: 1px solid #2a2a2a; border-radius: 8px; padding: 10px 12px; color: #fafafa; font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.15s; }
+.api-field input:focus { border-color: #f97316; }
+.api-field input::placeholder { color: #3f3f46; }
+
+.btn-iniciar { width: 100%; background: #f97316; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 700; color: #09090b; cursor: pointer; font-family: inherit; transition: background 0.15s; margin-top: 4px; }
+.btn-iniciar:hover { background: #ea6c0a; }
+.btn-iniciar:disabled { background: #1c1c1e; color: #3f3f46; cursor: not-allowed; }
+
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #3f3f46; display: inline-block; margin-right: 6px; }
+.status-dot.ok { background: #22c55e; }
+.status-info { font-size: 12px; color: #71717a; display: flex; align-items: center; }
+
+.btn-nova { width: 100%; background: none; border: 1px solid #2a2a2a; border-radius: 8px; padding: 8px; font-size: 12px; color: #71717a; cursor: pointer; font-family: inherit; }
+.btn-nova:hover { border-color: #f97316; color: #f97316; }
+
+.erro-sidebar { background: #1a0505; border: 1px solid #7f1d1d; border-radius: 8px; padding: 10px 12px; color: #f87171; font-size: 12px; display: none; }
+
+/* ── MAIN ── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Starters */
+.starters-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 24px; }
+.agno-center { text-align: center; margin-bottom: 40px; }
+.agno-logo-big { width: 80px; height: 80px; background: #f97316; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 800; color: #09090b; margin: 0 auto 16px; box-shadow: 0 0 60px #f9731633; }
+.agno-title { font-size: 32px; font-weight: 700; margin-bottom: 6px; }
+.agno-sub { font-size: 14px; color: #71717a; }
+.starters-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; width: 100%; max-width: 860px; }
+.starter { background: #0f0f10; border: 1px solid #1f1f1f; border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.15s; text-align: left; }
+.starter:hover { border-color: #f97316; background: #1a0f05; transform: translateY(-2px); }
+.starter-key { display: inline-block; background: #f9731622; border: 1px solid #f97316; color: #f97316; width: 28px; height: 28px; border-radius: 6px; text-align: center; line-height: 28px; font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+.starter-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.starter-desc { font-size: 12px; color: #71717a; line-height: 1.5; }
+.starter-full { grid-column: 1/-1; background: #0a150a; border-color: #166534; }
+.starter-full:hover { border-color: #22c55e; background: #0d1a0d; }
+.starter-full .starter-key { background: #22c55e22; border-color: #22c55e; color: #22c55e; }
+
+/* Chat */
+.chat-area { flex: 1; display: none; flex-direction: column; overflow: hidden; }
+.chat-toolbar { padding: 10px 16px; border-bottom: 1px solid #1f1f1f; display: flex; align-items: center; justify-content: space-between; }
+.chat-toolbar-left { font-size: 13px; font-weight: 600; }
+.chat-toolbar-right { display: flex; gap: 8px; }
+.tool-btn { background: none; border: 1px solid #2a2a2a; border-radius: 6px; padding: 5px 12px; font-size: 12px; color: #71717a; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.tool-btn:hover { border-color: #f97316; color: #f97316; }
+.tool-btn.blue:hover { border-color: #60a5fa; color: #60a5fa; }
+
+/* Split view */
+.split-view { flex: 1; display: flex; overflow: hidden; }
+.panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.panel + .panel { border-left: 1px solid #1f1f1f; }
+.panel-header { padding: 10px 16px; border-bottom: 1px solid #1f1f1f; font-size: 11px; font-weight: 600; color: #52525b; text-transform: uppercase; letter-spacing: 0.8px; display: flex; align-items: center; gap: 6px; }
+.panel-content { flex: 1; overflow-y: auto; padding: 16px; }
+
+/* Process panel */
+.process-empty { color: #3f3f46; font-size: 13px; text-align: center; margin-top: 40px; }
+.process-step { margin-bottom: 16px; }
+.step-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.step-icon { width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.step-icon.running { background: #1a1a0a; border: 1px solid #f59e0b; animation: pulse 1s infinite; }
+.step-icon.done { background: #0a150a; border: 1px solid #22c55e; }
+.step-icon.error { background: #1a0505; border: 1px solid #ef4444; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.step-name { font-size: 13px; font-weight: 600; }
+.step-name.running { color: #f59e0b; }
+.step-name.done { color: #22c55e; }
+.step-result { font-family: 'Geist Mono', monospace; font-size: 11px; color: #71717a; background: #0f0f10; border: 1px solid #1f1f1f; border-radius: 6px; padding: 8px; margin-top: 4px; white-space: pre-wrap; max-height: 100px; overflow-y: auto; }
+
+/* Result panel */
+.result-content { font-size: 14px; line-height: 1.7; color: #d4d4d8; }
+.result-content h1, .result-content h2, .result-content h3 { color: #fafafa; margin: 16px 0 8px; }
+.result-content h1 { font-size: 18px; border-bottom: 1px solid #1f1f1f; padding-bottom: 8px; }
+.result-content h2 { font-size: 16px; color: #f97316; }
+.result-content h3 { font-size: 14px; color: #60a5fa; }
+.result-content p { margin: 8px 0; }
+.result-content table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+.result-content th { background: #1c1c1e; padding: 8px 12px; text-align: left; color: #71717a; font-size: 11px; text-transform: uppercase; border: 1px solid #2a2a2a; }
+.result-content td { padding: 8px 12px; border: 1px solid #1f1f1f; }
+.result-content tr:nth-child(even) td { background: #0f0f10; }
+.result-content ul, .result-content ol { padding-left: 20px; margin: 8px 0; }
+.result-content li { margin: 4px 0; }
+.result-content strong { color: #fafafa; }
+.result-content code { background: #1c1c1e; border-radius: 4px; padding: 1px 5px; font-family: 'Geist Mono', monospace; font-size: 12px; color: #f97316; }
+.result-content pre { background: #0f0f10; border: 1px solid #1f1f1f; border-radius: 8px; padding: 12px; overflow-x: auto; }
+
+.typing-indicator { display: flex; gap: 4px; padding: 8px 0; }
+.typing-dot { width: 6px; height: 6px; border-radius: 50%; background: #71717a; animation: bounce 1.2s infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+/* Input */
+.input-area { padding: 12px 16px; border-top: 1px solid #1f1f1f; display: flex; gap: 8px; }
+.input-wrap { flex: 1; background: #0f0f10; border: 1px solid #2a2a2a; border-radius: 10px; padding: 10px 14px; }
+.input-wrap textarea { width: 100%; background: none; border: none; color: #fafafa; font-size: 14px; font-family: inherit; resize: none; outline: none; min-height: 22px; max-height: 100px; }
+.input-wrap textarea::placeholder { color: #3f3f46; }
+.send-btn { width: 38px; height: 38px; background: #f97316; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; align-self: flex-end; }
+.send-btn:hover { background: #ea6c0a; }
+.send-btn:disabled { background: #1c1c1e; cursor: not-allowed; }
+.send-btn svg { width: 16px; height: 16px; fill: #09090b; }
+
+/* Viewer modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: #000000cc; z-index: 1000; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: #09090b; border: 1px solid #1f1f1f; border-radius: 16px; width: 90vw; max-width: 1000px; height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal-header { padding: 14px 20px; border-bottom: 1px solid #1f1f1f; display: flex; align-items: center; justify-content: space-between; }
+.modal-title { font-size: 14px; font-weight: 600; }
+.modal-legend { font-size: 12px; color: #71717a; margin-top: 2px; }
+.modal-close { background: none; border: none; color: #71717a; font-size: 18px; cursor: pointer; padding: 4px; }
+.modal-body { flex: 1; position: relative; }
+#viewerCanvas { width: 100%; height: 100%; display: block; }
+.viewer-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; background: #09090b; }
+.spinner { width: 36px; height: 36px; border: 3px solid #1f1f1f; border-top-color: #f97316; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo">F</div>
+    <div>
+      <div class="header-title">Agente de Coordenação e Segurança AEC</div>
+      <div class="header-sub">Análise de modelos BIM com Inteligência Artificial</div>
+    </div>
+  </div>
+  <div class="header-badges">
+    <span class="badge orange">Agno</span>
+    <span class="badge">Claude Sonnet 4.6</span>
+    <span class="badge">ifcopenshell</span>
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Chave Anthropic</div>
+      <div class="api-field">
+        <input type="password" id="apiKey" placeholder="sk-ant-..." />
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Arquivo IFC</div>
+
+      <div class="ifc-upload" id="uploadIFC" onclick="document.getElementById('fileIFC').click()">
+        <input type="file" id="fileIFC" accept=".ifc" multiple onchange="carregarIFCs(this)">
+        <div class="ifc-upload-icon">📐</div>
+        <div class="ifc-upload-label">Selecionar arquivo(s) IFC</div>
+        <div class="ifc-upload-sub">Um arquivo com tudo, ou múltiplos por disciplina</div>
+        <div class="ifc-upload-filename" id="listaArquivos"></div>
+      </div>
+
+      <div class="ou-divider">— ou —</div>
+
+      <button class="btn-exemplo" id="btnExemplo" onclick="usarExemplo()">
+        📦 Usar modelo de exemplo incluído
+      </button>
+    </div>
+
+    <div class="sidebar-section">
+      <button class="btn-iniciar" id="btnIniciar" onclick="iniciar()">Iniciar agente →</button>
+      <div class="erro-sidebar" id="erroSidebar"></div>
+    </div>
+
+    <div class="sidebar-section" id="statusSection" style="display:none;">
+      <div class="sidebar-label">Status</div>
+      <div class="status-info">
+        <span class="status-dot ok"></span>
+        <span id="statusIfc">Agente ativo</span>
+      </div>
+      <div style="height:8px;"></div>
+      <button class="btn-nova" onclick="novaAnalise()">📂 Nova análise</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- STARTERS -->
+    <div class="starters-area" id="startersArea">
+      <div class="agno-center">
+        <div class="agno-logo-big">F</div>
+        <div class="agno-title">Agno</div>
+        <div class="agno-sub">Claude Sonnet 4.6 &nbsp;·&nbsp; ifcopenshell &nbsp;·&nbsp; Coordenação AEC</div>
+      </div>
+      <div class="starters-grid">
+        <div class="starter" onclick="rodar('a')">
+          <div class="starter-key">A</div>
+          <div class="starter-title">Clashes Geométricos</div>
+          <div class="starter-desc">Interferências 3D reais entre instalações e estrutura, e entre todas as disciplinas</div>
+        </div>
+        <div class="starter" onclick="rodar('b')">
+          <div class="starter-key">B</div>
+          <div class="starter-title">Rota de Fuga</div>
+          <div class="starter-desc">Distância porta de apartamento → porta corta-fogo da escada (NBR 9077)</div>
+        </div>
+        <div class="starter" onclick="rodar('c')">
+          <div class="starter-key">C</div>
+          <div class="starter-title">Sistema de Incêndio</div>
+          <div class="starter-desc">Extintores por raio (NBR 12693) e sprinklers por densidade de área (NBR 10897)</div>
+        </div>
+        <div class="starter starter-full" onclick="rodar('d')">
+          <div class="starter-key">D</div>
+          <div class="starter-title">Análise Completa — todas as verificações</div>
+          <div class="starter-desc">Executa A + B + C em sequência com relatório completo e resumo executivo</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div class="chat-area" id="chatArea">
+      <div class="chat-toolbar">
+        <div class="chat-toolbar-left" id="chatTitulo">Análise Completa</div>
+        <div class="chat-toolbar-right">
+          <button class="tool-btn blue" onclick="abrirViewer()">🔍 Ver em 3D</button>
+          <button class="tool-btn" onclick="baixarIFC()" id="btnDownload">⬇ Baixar IFC auditado</button>
+          <button class="tool-btn" onclick="voltarMenu()">← Menu</button>
+        </div>
+      </div>
+
+      <div class="split-view">
+        <!-- Painel esquerdo: agente rodando -->
+        <div class="panel">
+          <div class="panel-header">
+            <span>⚡</span> Agente rodando
+          </div>
+          <div class="panel-content" id="processPanel">
+            <div class="process-empty">Selecione uma verificação para ver o agente em ação</div>
+          </div>
+        </div>
+
+        <!-- Painel direito: resultado formatado -->
+        <div class="panel">
+          <div class="panel-header">
+            <span>📋</span> Relatório
+          </div>
+          <div class="panel-content">
+            <div class="result-content" id="resultPanel"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <div class="input-wrap">
+          <textarea id="msgInput" placeholder="Faça uma pergunta sobre o modelo IFC..." rows="1"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarChat()}"
+            oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+        </div>
+        <button class="send-btn" id="sendBtn" onclick="enviarChat()">
+          <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- VIEWER MODAL -->
+<div class="modal-overlay" id="viewerModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Visualizador 3D — Auditoria BIM</div>
+        <div class="modal-legend">
+          <span style="color:#f59e0b">■</span> Clash &nbsp;
+          <span style="color:#ef4444">■</span> Não conforme &nbsp;
+          <span style="color:#6b7280">■</span> Conforme
+        </div>
+      </div>
+      <button class="modal-close" onclick="fecharViewer()">✕</button>
+    </div>
+    <div class="modal-body">
+      <canvas id="viewerCanvas"></canvas>
+      <div class="viewer-loading" id="viewerLoading">
+        <div class="spinner"></div>
+        <div style="font-size:13px;color:#71717a;">Carregando geometria 3D...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ── Estado ──
+let agentIniciado = false;
+let modoExemplo = false;
+let arquivosCarregados = {};
+let viewerRenderer = null, viewerScene, viewerCamera, viewerAnimId;
+let viewerSpherical = {theta: Math.PI/4, phi: Math.PI/3, radius: 15};
+let viewerTarget = {x:0, y:0, z:0};
+let isDragging = false, lastMouse = {x:0, y:0};
+
+// ── Carregar múltiplos IFCs ──
+async function carregarIFCs(input) {
+  if (!input.files || !input.files.length) return;
+  const tipos = ['arch', 'struct', 'mep'];
+  const lista = [];
+  for (let i = 0; i < input.files.length; i++) {
+    const arquivo = input.files[i];
+    const tipo = tipos[i] || 'arch';
+    const form = new FormData();
+    form.append('file', arquivo);
+    form.append('tipo', tipo);
+    try {
+      const res = await fetch('/api/upload-ifc', {method:'POST', body: form});
+      const data = await res.json();
+      if (data.erro) { mostrarErro(data.erro); return; }
+      arquivosCarregados[tipo] = arquivo.name;
+      lista.push(arquivo.name);
+    } catch(e) { mostrarErro('Erro ao carregar: ' + e.message); return; }
+  }
+  document.getElementById('uploadIFC').classList.add('loaded');
+  document.getElementById('listaArquivos').innerHTML = lista.map(n => `✅ ${n}`).join('<br>');
+  modoExemplo = false;
+  document.getElementById('btnExemplo').classList.remove('ativo');
+}
+
+function usarExemplo() {
+  modoExemplo = !modoExemplo;
+  document.getElementById('btnExemplo').classList.toggle('ativo', modoExemplo);
+  if (modoExemplo) {
+    arquivosCarregados = {};
+    ['uploadArch','uploadStruct','uploadMEP'].forEach(id => document.getElementById(id).classList.remove('loaded'));
+    ['nameArch','nameStruct','nameMEP'].forEach(id => document.getElementById(id).textContent = '');
+  }
+}
+
+// ── Iniciar ──
+async function iniciar() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const btn = document.getElementById('btnIniciar');
+  const erro = document.getElementById('erroSidebar');
+  erro.style.display = 'none';
+
+  if (!apiKey) { mostrarErro('Informe sua chave Anthropic API Key.'); return; }
+  if (!modoExemplo && Object.keys(arquivosCarregados).length === 0) {
+    mostrarErro('Carregue ao menos um arquivo IFC ou use o modelo de exemplo.'); return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Iniciando...';
+
+  try {
+    const res = await fetch('/api/setup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({api_key: apiKey, usar_exemplo: modoExemplo})
+    });
+    const data = await res.json();
+    if (data.erro) { mostrarErro(data.erro); btn.disabled=false; btn.textContent='Iniciar agente →'; return; }
+
+    agentIniciado = true;
+    document.getElementById('statusSection').style.display = 'block';
+    document.getElementById('statusIfc').textContent = data.ifc_ativo ? data.ifc_ativo.split('\\').pop().split('/').pop() : 'Ativo';
+    btn.textContent = '✅ Agente ativo';
+
+  } catch(e) { mostrarErro('Erro: ' + e.message); btn.disabled=false; btn.textContent='Iniciar agente →'; }
+}
+
+function mostrarErro(msg) {
+  const el = document.getElementById('erroSidebar');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// ── Rodar verificação com streaming ──
+const TITULOS = {a:'Clashes Geométricos', b:'Rota de Fuga (NBR 9077)', c:'Sistema de Incêndio', d:'Análise Completa'};
+
+async function rodar(tipo) {
+  if (!agentIniciado) { mostrarErro('Inicie o agente primeiro.'); return; }
+
+  document.getElementById('chatTitulo').textContent = TITULOS[tipo];
+  document.getElementById('startersArea').style.display = 'none';
+  document.getElementById('chatArea').style.display = 'flex';
+  document.getElementById('processPanel').innerHTML = '';
+  document.getElementById('resultPanel').innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+  document.getElementById('sendBtn').disabled = true;
+
+  const toolSteps = {};
+  let resultadoAcumulado = '';
+
+  const res = await fetch('/api/stream-verificar', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({tipo})
+  });
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const {value, done} = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, {stream: true});
+    const linhas = buffer.split('\n');
+    buffer = linhas.pop();
+    for (const linha of linhas) {
+      if (!linha.startsWith('data: ')) continue;
+      try {
+        const ev = JSON.parse(linha.slice(6));
+        processarEvento(ev, toolSteps, resultadoAcumulado, (r) => { resultadoAcumulado = r; });
+      } catch(e) {}
+    }
+  }
+
+  document.getElementById('sendBtn').disabled = false;
+}
+
+function processarEvento(ev, toolSteps, resultado, setResultado) {
+  const proc = document.getElementById('processPanel');
+  const res = document.getElementById('resultPanel');
+
+  if (ev.tipo === 'inicio') {
+    proc.innerHTML = '<div style="font-size:12px;color:#52525b;margin-bottom:12px;">Agente iniciado — aguardando tools...</div>';
+
+  } else if (ev.tipo === 'tool_inicio') {
+    const id = 'step_' + ev.tool.replace(/[^a-z]/gi,'_');
+    toolSteps[ev.tool] = id;
+    const div = document.createElement('div');
+    div.className = 'process-step'; div.id = id;
+    const nomes = {
+      'detectar_clashes_instalacoes_estrutura': '🔧 Detectando clashes geométricos...',
+      'verificar_distancia_rota_fuga': '🚪 Verificando rota de fuga...',
+      'verificar_sistema_incendio_completo': '🔥 Verificando sistema de incêndio...'
+    };
+    div.innerHTML = `<div class="step-header">
+      <div class="step-icon running">⚡</div>
+      <div class="step-name running">${nomes[ev.tool] || ev.tool}</div>
+    </div>`;
+    proc.appendChild(div);
+    proc.scrollTop = proc.scrollHeight;
+
+  } else if (ev.tipo === 'tool_fim') {
+    const id = toolSteps[ev.tool];
+    if (id) {
+      const div = document.getElementById(id);
+      if (div) {
+        const nomes = {
+          'detectar_clashes_instalacoes_estrutura': '🔧 Clashes detectados',
+          'verificar_distancia_rota_fuga': '🚪 Rota de fuga verificada',
+          'verificar_sistema_incendio_completo': '🔥 Sistema de incêndio verificado'
+        };
+        div.innerHTML = `<div class="step-header">
+          <div class="step-icon done">✓</div>
+          <div class="step-name done">${nomes[ev.tool] || ev.tool}</div>
+        </div>
+        <div class="step-result">${ev.resultado || ''}</div>`;
+        proc.scrollTop = proc.scrollHeight;
+      }
+    }
+
+  } else if (ev.tipo === 'conteudo') {
+    resultado += ev.delta;
+    setResultado(resultado);
+    res.innerHTML = marked.parse(resultado);
+    res.scrollTop = res.scrollHeight;
+
+  } else if (ev.tipo === 'fim') {
+    if (!resultado) res.innerHTML = '<div style="color:#71717a;font-size:13px;">Análise concluída.</div>';
+    proc.innerHTML += '<div style="font-size:12px;color:#22c55e;margin-top:12px;">✅ Análise concluída</div>';
+
+  } else if (ev.tipo === 'erro') {
+    res.innerHTML = `<div style="color:#f87171;font-size:13px;">Erro: ${ev.msg}</div>`;
+  }
+}
+
+// ── Chat livre ──
+async function enviarChat() {
+  const input = document.getElementById('msgInput');
+  const texto = input.value.trim();
+  if (!texto || !agentIniciado) return;
+  input.value = ''; input.style.height = 'auto';
+  document.getElementById('sendBtn').disabled = true;
+  document.getElementById('resultPanel').innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+  try {
+    const res = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mensagem:texto})});
+    const data = await res.json();
+    document.getElementById('resultPanel').innerHTML = marked.parse(data.resultado || data.erro || '');
+  } catch(e) {
+    document.getElementById('resultPanel').innerHTML = '<div style="color:#f87171">Erro ao obter resposta.</div>';
+  }
+  document.getElementById('sendBtn').disabled = false;
+}
+
+function voltarMenu() {
+  document.getElementById('startersArea').style.display = 'flex';
+  document.getElementById('chatArea').style.display = 'none';
+}
+
+function novaAnalise() {
+  agentIniciado = false;
+  modoExemplo = false;
+  arquivosCarregados = {};
+  document.getElementById('btnIniciar').disabled = false;
+  document.getElementById('btnIniciar').textContent = 'Iniciar agente →';
+  document.getElementById('statusSection').style.display = 'none';
+  document.getElementById('btnExemplo').classList.remove('ativo');
+  document.getElementById('uploadIFC').classList.remove('loaded');
+  document.getElementById('listaArquivos').innerHTML = '';
+  voltarMenu();
+}
+
+// ── Download IFC auditado ──
+async function baixarIFC() {
+  const btn = document.getElementById('btnDownload');
+  btn.textContent = '⏳ Gerando...'; btn.disabled = true;
+  try {
+    const res = await fetch('/api/download-ifc-auditado');
+    if (!res.ok) { const e = await res.json(); alert('Erro: ' + e.erro); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const cd = res.headers.get('Content-Disposition') || '';
+    const match = cd.match(/filename="([^"]+)"/);
+    a.href = url; a.download = match ? match[1] : 'modelo_auditado.ifc';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) { alert('Erro: ' + e.message); }
+  finally { btn.textContent = '⬇ Baixar IFC auditado'; btn.disabled = false; }
+}
+
+// ── Visualizador 3D ──
+async function abrirViewer() {
+  document.getElementById('viewerModal').classList.add('open');
+  document.getElementById('viewerLoading').style.display = 'flex';
+  const canvas = document.getElementById('viewerCanvas');
+  canvas.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/viewer-data');
+    const data = await res.json();
+    if (data.erro) {
+      document.getElementById('viewerLoading').innerHTML = `<div style="color:#f87171;padding:20px;text-align:center">⚠️ ${data.erro}</div>`;
+      return;
+    }
+    if (!data.elementos || !data.elementos.length) {
+      document.getElementById('viewerLoading').innerHTML = `<div style="color:#71717a;padding:20px;text-align:center">Nenhum elemento 3D encontrado no modelo.<br>Use o modelo_exemplo.ifc para visualização.</div>`;
+      return;
+    }
+    iniciarViewer3D(canvas, data.elementos);
+    document.getElementById('viewerLoading').style.display = 'none';
+    canvas.style.display = 'block';
+  } catch(e) {
+    document.getElementById('viewerLoading').innerHTML = `<div style="color:#f87171;padding:20px">Erro: ${e.message}</div>`;
+  }
+}
+
+function iniciarViewer3D(canvas, elementos) {
+  const w = canvas.parentElement.clientWidth;
+  const h = canvas.parentElement.clientHeight;
+  canvas.width = w; canvas.height = h;
+
+  if (viewerRenderer) { viewerRenderer.dispose(); viewerRenderer = null; }
+  if (viewerAnimId) cancelAnimationFrame(viewerAnimId);
+
+  viewerScene = new THREE.Scene();
+  viewerScene.background = new THREE.Color(0x09090b);
+  viewerCamera = new THREE.PerspectiveCamera(45, w/h, 0.01, 1000);
+  viewerRenderer = new THREE.WebGLRenderer({canvas, antialias: true});
+  viewerRenderer.setSize(w, h);
+  viewerRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  viewerScene.add(new THREE.GridHelper(20, 20, 0x1f1f1f, 0x1f1f1f));
+  viewerScene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+  dir.position.set(5, 10, 5);
+  viewerScene.add(dir);
+
+  // Centro
+  let cx=0, cy=0, cz=0;
+  elementos.forEach(el => {
+    cx += (el.bbox.xmin+el.bbox.xmax)/2;
+    cy += (el.bbox.zmin+el.bbox.zmax)/2;
+    cz += (el.bbox.ymin+el.bbox.ymax)/2;
+  });
+  const n = elementos.length;
+  viewerTarget = {x:cx/n, y:cy/n, z:cz/n};
+
+  elementos.forEach(el => {
+    const b = el.bbox;
+    const dx = Math.max(b.xmax-b.xmin, 0.05);
+    const dy = Math.max(b.zmax-b.zmin, 0.05);
+    const dz = Math.max(b.ymax-b.ymin, 0.05);
+    const geo = new THREE.BoxGeometry(dx, dy, dz);
+    const mat = new THREE.MeshLambertMaterial({
+      color: new THREE.Color(el.cor),
+      transparent: el.status==='OK', opacity: el.status==='OK' ? 0.5 : 0.9
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set((b.xmin+b.xmax)/2-viewerTarget.x, (b.zmin+b.zmax)/2-viewerTarget.y, (b.ymin+b.ymax)/2-viewerTarget.z);
+    viewerScene.add(mesh);
+    if (el.status !== 'OK') {
+      const wf = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({color: el.cor}));
+      wf.position.copy(mesh.position);
+      viewerScene.add(wf);
+    }
+  });
+
+  atualizarCamera();
+  function animar() { viewerAnimId = requestAnimationFrame(animar); viewerRenderer.render(viewerScene, viewerCamera); }
+  animar();
+
+  canvas.addEventListener('mousedown', e => { isDragging=true; lastMouse={x:e.clientX, y:e.clientY}; });
+  canvas.addEventListener('mouseup', () => isDragging=false);
+  canvas.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    viewerSpherical.theta -= (e.clientX-lastMouse.x)*0.01;
+    viewerSpherical.phi = Math.max(0.1, Math.min(Math.PI-0.1, viewerSpherical.phi-(e.clientY-lastMouse.y)*0.01));
+    lastMouse = {x:e.clientX, y:e.clientY};
+    atualizarCamera();
+  });
+  canvas.addEventListener('wheel', e => { viewerSpherical.radius = Math.max(1, viewerSpherical.radius+e.deltaY*0.01); atualizarCamera(); });
+}
+
+function atualizarCamera() {
+  const {theta, phi, radius} = viewerSpherical;
+  viewerCamera.position.set(
+    radius*Math.sin(phi)*Math.cos(theta)+viewerTarget.x,
+    radius*Math.cos(phi)+viewerTarget.y,
+    radius*Math.sin(phi)*Math.sin(theta)+viewerTarget.z
+  );
+  viewerCamera.lookAt(viewerTarget.x, viewerTarget.y, viewerTarget.z);
+}
+
+function fecharViewer() {
+  document.getElementById('viewerModal').classList.remove('open');
+  if (viewerAnimId) { cancelAnimationFrame(viewerAnimId); viewerAnimId = null; }
+  if (viewerRenderer) { viewerRenderer.dispose(); viewerRenderer = null; }
+}
+</script>
+</body>
+</html>

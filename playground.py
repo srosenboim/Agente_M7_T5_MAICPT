@@ -265,6 +265,14 @@ async def viewer_data():
                 if not r.get("conforme") and "porta_apartamento" in r:
                     nc_nomes.add(r["porta_apartamento"])
         except: pass
+        # Portas com largura abaixo do mínimo (NBR 9050: 0.80m)
+        try:
+            model_temp = ifcopenshell.open(ifc)
+            for door in model_temp.by_type("IfcDoor"):
+                w = getattr(door, "OverallWidth", None)
+                if w is not None and float(w) < 0.80:
+                    nc_nomes.add(door.Name)
+        except: pass
         try:
             for r in verificar_sistema_incendio(ifc):
                 if not r.get("conforme"):

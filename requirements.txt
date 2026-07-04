@@ -1,7 +1,0 @@
-agno
-ifcopenshell
-anthropic
-fastapi
-uvicorn
-ag-ui-protocol
-python-dotenv

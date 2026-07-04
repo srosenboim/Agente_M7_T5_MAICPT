@@ -307,8 +307,14 @@ HTML = r"""<!DOCTYPE html>
 
       <div class="field">
         <label>Arquivo IFC do projeto</label>
-        <input type="text" id="ifcPath" placeholder="modelo_exemplo.ifc" />
-        <div class="hint">Deixe em branco para usar o modelo de exemplo incluído sem carregar outro arquivo. Para usar seu próprio projeto, informe o caminho completo do arquivo .ifc exportado do Revit, ArchiCAD ou Bonsai.</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="ifcPath" placeholder="modelo_exemplo.ifc (padrão)" style="flex:1;" readonly />
+          <label for="ifcFile" style="background:#1c1c1e;border:1px solid #2a2a2a;border-radius:8px;padding:12px 16px;cursor:pointer;font-size:13px;color:#a1a1aa;white-space:nowrap;flex-shrink:0;">
+            📂 Escolher arquivo
+          </label>
+          <input type="file" id="ifcFile" accept=".ifc" style="display:none;" onchange="selecionarIfc(this)" />
+        </div>
+        <div class="hint">Clique em <strong>Escolher arquivo</strong> para selecionar seu IFC. Deixe em branco para usar o modelo de exemplo incluído.</div>
       </div>
 
       <button class="btn-start" id="btnSetup" onclick="setup()">Iniciar agente →</button>
@@ -407,6 +413,17 @@ function mostrarChat() {
   document.getElementById('inputBar').classList.add('visible');
 }
 
+function selecionarIfc(input) {
+  if (input.files && input.files[0]) {
+    // Usa o caminho completo via webkitRelativePath ou name
+    const arquivo = input.files[0];
+    // No browser, só temos acesso ao nome — o usuário precisa estar na pasta certa
+    // Guardamos o objeto File para upload posterior
+    window._ifcFile = arquivo;
+    document.getElementById('ifcPath').value = arquivo.name;
+  }
+}
+
 async function setup() {
   const apiKey = document.getElementById('apiKey').value.trim();
   const ifcPath = document.getElementById('ifcPath').value.trim() || 'modelo_exemplo.ifc';
@@ -414,8 +431,21 @@ async function setup() {
   const erro = document.getElementById('setupError');
   if (!apiKey) { erro.textContent = 'Informe sua chave Anthropic API Key.'; erro.style.display = 'block'; return; }
   btn.disabled = true; btn.textContent = 'Iniciando agente...'; erro.style.display = 'none';
+
+  // Se selecionou um arquivo, faz upload primeiro
+  let ifcFinal = ifcPath;
+  if (window._ifcFile) {
+    try {
+      const formData = new FormData();
+      formData.append('file', window._ifcFile);
+      const upRes = await fetch('/api/upload-ifc', {method: 'POST', body: formData});
+      const upData = await upRes.json();
+      if (upData.erro) { erro.textContent = upData.erro; erro.style.display = 'block'; btn.disabled = false; btn.textContent = 'Iniciar agente →'; return; }
+      ifcFinal = upData.nome;
+    } catch(e) { /* usa o nome mesmo */ }
+  }
   try {
-    const res = await fetch('/api/setup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({api_key: apiKey, ifc_path: ifcPath}) });
+    const res = await fetch('/api/setup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({api_key: apiKey, ifc_path: ifcFinal}) });
     const data = await res.json();
     if (data.erro) { erro.textContent = data.erro; erro.style.display = 'block'; btn.disabled = false; btn.textContent = 'Iniciar agente →'; return; }
     document.getElementById('ifcLabel').textContent = data.ifc;
@@ -536,7 +566,13 @@ async function confirmarNovaAnalise() {
     </div>
     <div class="field">
       <label>Arquivo IFC</label>
-      <input type="text" id="novoIfc" placeholder="modelo_exemplo.ifc" />
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="novoIfc" placeholder="modelo_exemplo.ifc" style="flex:1;" readonly />
+        <label for="novoIfcFile" style="background:#1c1c1e;border:1px solid #2a2a2a;border-radius:8px;padding:12px 14px;cursor:pointer;font-size:13px;color:#a1a1aa;white-space:nowrap;flex-shrink:0;">
+          📂 Escolher
+        </label>
+        <input type="file" id="novoIfcFile" accept=".ifc" style="display:none;" onchange="document.getElementById('novoIfc').value=this.files[0]?.name||''" />
+      </div>
       <div class="hint">Deixe em branco para usar o modelo de exemplo incluído sem carregar outro arquivo</div>
     </div>
     <div style="display:flex;gap:12px;margin-top:8px;">
@@ -726,6 +762,21 @@ async def home():
     return HTMLResponse(content=HTML)
 
 
+@app.post("/api/upload-ifc")
+async def upload_ifc(request: Request):
+    """Recebe upload de arquivo IFC e salva na pasta do projeto."""
+    from fastapi import UploadFile, File
+    import shutil
+    form = await request.form()
+    arquivo = form.get("file")
+    if not arquivo:
+        return JSONResponse({"erro": "Nenhum arquivo enviado."}, status_code=400)
+    destino = Path(__file__).parent / arquivo.filename
+    with open(destino, "wb") as f:
+        shutil.copyfileobj(arquivo.file, f)
+    return JSONResponse({"status": "ok", "caminho": str(destino), "nome": arquivo.filename})
+
+
 @app.post("/api/setup")
 async def api_setup(request: Request):
     global agente_global, ifc_path_global
@@ -735,11 +786,17 @@ async def api_setup(request: Request):
 
     if not api_key:
         return JSONResponse({"erro": "Chave não informada."}, status_code=400)
-    if not Path(ifc).exists():
+
+    # Converte para caminho absoluto
+    ifc_abs = str(Path(ifc).resolve()) if not Path(ifc).is_absolute() else ifc
+    # Se não encontrar como absoluto, tenta relativo à pasta do playground.py
+    if not Path(ifc_abs).exists():
+        ifc_abs = str((Path(__file__).parent / ifc).resolve())
+    if not Path(ifc_abs).exists():
         return JSONResponse({"erro": f"Arquivo IFC não encontrado: {ifc}"}, status_code=400)
 
     os.environ["ANTHROPIC_API_KEY"] = api_key
-    ifc_path_global = ifc
+    ifc_path_global = ifc_abs
 
     from agno.agent import Agent
     from agno.models.anthropic import Claude

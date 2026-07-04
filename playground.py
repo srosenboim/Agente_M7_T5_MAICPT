@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 playground.py — Agente de Coordenação e Segurança AEC
 Framework: Agno | Modelo: Claude Sonnet | BIM: ifcopenshell

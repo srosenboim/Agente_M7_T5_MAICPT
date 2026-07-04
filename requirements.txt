@@ -5,5 +5,4 @@ fastapi
 uvicorn
 ag-ui-protocol
 python-dotenv
-weasyprint
- 
+fpdf2

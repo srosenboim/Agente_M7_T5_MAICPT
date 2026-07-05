@@ -110,67 +110,62 @@ async def api_setup(request: Request):
 
     return JSONResponse({"status": "ok", "ifc_ativo": ifc_ativo()})
 
-# Progress storage for polling
-progresso_global = []
-analise_rodando = False
-
-@app.get("/api/progresso")
-async def get_progresso():
-    return JSONResponse({"eventos": progresso_global, "rodando": analise_rodando})
-
 @app.post("/api/stream-verificar")
 async def stream_verificar(request: Request):
-    global progresso_global, analise_rodando
     if agente_global is None:
         return JSONResponse({"erro": "Agente nao inicializado."}, status_code=400)
     data = await request.json()
     tipo = data.get("tipo", "d")
 
-    import anthropic
-    import threading as _th
-
-    progresso_global = []
-    analise_rodando = True
-
-    def add(ev):
-        progresso_global.append(ev)
-
-    def rodar():
-        global analise_rodando
+    async def gerar():
+        import anthropic
+        resultados = {}
         try:
-            resultados = {}
-            add({"tipo": "inicio"})
+            yield f"data: {json.dumps({'tipo': 'inicio'})}\n\n"
+            await asyncio.sleep(0.4)
 
             if tipo in ("a", "d"):
-                add({"tipo": "tool_inicio", "tool": "detectar_clashes_fn"})
-                add({"tipo": "progresso", "tool": "detectar_clashes_fn", "linha": "Abrindo IFC com ifcopenshell..."})
-                time.sleep(0.3)
-                add({"tipo": "progresso", "tool": "detectar_clashes_fn", "linha": "Extraindo geometria 3D (bounding boxes)..."})
+                yield f"data: {json.dumps({'tipo': 'tool_inicio', 'tool': 'detectar_clashes_fn'})}\n\n"
+                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': 'Abrindo IFC com ifcopenshell...'})}\n\n"
+                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': 'Extraindo geometria 3D (bounding boxes)...'})}\n\n"
+                await asyncio.sleep(0.4)
                 r = detectar_clashes_fn()
-                add({"tipo": "progresso", "tool": "detectar_clashes_fn", "linha": "Comparando disciplinas entre si e com estrutura..."})
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': 'Comparando disciplinas entre si e com estrutura...'})}\n\n"
+                await asyncio.sleep(0.4)
                 resultados["clashes"] = r
-                add({"tipo": "tool_fim", "tool": "detectar_clashes_fn", "resultado": r[:300]})
+                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'detectar_clashes_fn', 'resultado': r[:300]})}\n\n"
+                await asyncio.sleep(0.4)
 
             if tipo in ("b", "d"):
-                add({"tipo": "tool_inicio", "tool": "verificar_rota_fuga_fn"})
-                add({"tipo": "progresso", "tool": "verificar_rota_fuga_fn", "linha": "Localizando portas no modelo IFC..."})
-                time.sleep(0.3)
-                add({"tipo": "progresso", "tool": "verificar_rota_fuga_fn", "linha": "Identificando portas corta-fogo..."})
+                yield f"data: {json.dumps({'tipo': 'tool_inicio', 'tool': 'verificar_rota_fuga_fn'})}\n\n"
+                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': 'Localizando portas no modelo IFC...'})}\n\n"
+                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': 'Identificando portas corta-fogo...'})}\n\n"
+                await asyncio.sleep(0.4)
                 r = verificar_rota_fuga_fn()
-                add({"tipo": "progresso", "tool": "verificar_rota_fuga_fn", "linha": "Calculando distancias em planta (metros)..."})
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': 'Calculando distancias em planta (metros)...'})}\n\n"
+                await asyncio.sleep(0.4)
                 resultados["rota_fuga"] = r
-                add({"tipo": "tool_fim", "tool": "verificar_rota_fuga_fn", "resultado": r[:300]})
+                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'verificar_rota_fuga_fn', 'resultado': r[:300]})}\n\n"
+                await asyncio.sleep(0.4)
 
             if tipo in ("c", "d"):
-                add({"tipo": "tool_inicio", "tool": "verificar_sistema_incendio_fn"})
-                add({"tipo": "progresso", "tool": "verificar_sistema_incendio_fn", "linha": "Localizando IfcFireSuppressionTerminal..."})
-                time.sleep(0.3)
-                add({"tipo": "progresso", "tool": "verificar_sistema_incendio_fn", "linha": "Calculando cobertura extintores e sprinklers..."})
+                yield f"data: {json.dumps({'tipo': 'tool_inicio', 'tool': 'verificar_sistema_incendio_fn'})}\n\n"
+                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_sistema_incendio_fn', 'linha': 'Localizando IfcFireSuppressionTerminal...'})}\n\n"
+                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_sistema_incendio_fn', 'linha': 'Calculando cobertura extintores e sprinklers...'})}\n\n"
+                await asyncio.sleep(0.4)
                 r = verificar_sistema_incendio_fn()
                 resultados["sistema_incendio"] = r
-                add({"tipo": "tool_fim", "tool": "verificar_sistema_incendio_fn", "resultado": r[:300]})
+                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'verificar_sistema_incendio_fn', 'resultado': r[:300]})}\n\n"
+                await asyncio.sleep(0.4)
 
-            add({"tipo": "formatando"})
+            yield f"data: {json.dumps({'tipo': 'formatando'})}\n\n"
+            await asyncio.sleep(0.4)
 
             dados = "\n\n".join([f"{k}:\n{v}" for k, v in resultados.items()])
             prompt = f"""Com base nos dados reais do modelo IFC, elabore um relatorio tecnico profissional em portugues.
@@ -181,23 +176,25 @@ DADOS REAIS:
 Apresente em markdown com tabelas. Use os nomes exatos dos elementos. Inclua resumo executivo."""
 
             client = anthropic.Anthropic()
-            texto = ""
             with client.messages.stream(model="claude-sonnet-4-6", max_tokens=4096,
                                         messages=[{"role": "user", "content": prompt}]) as stream:
-                for chunk in stream.text_stream:
-                    texto += chunk
-                    add({"tipo": "conteudo_parcial", "texto": texto})
+                for text in stream.text_stream:
+                    yield f"data: {json.dumps({'tipo': 'conteudo', 'delta': text})}\n\n"
+                    await asyncio.sleep(0.4)
 
-            add({"tipo": "fim", "texto_final": texto})
+            yield f"data: {json.dumps({'tipo': 'fim'})}\n\n"
+            await asyncio.sleep(0.4)
 
         except Exception as e:
-            add({"tipo": "erro", "msg": str(e)})
-        finally:
-            analise_rodando = False
+            yield f"data: {json.dumps({'tipo': 'erro', 'msg': str(e)})}\n\n"
+            await asyncio.sleep(0.4)
 
-    _th.Thread(target=rodar, daemon=True).start()
-    return JSONResponse({"status": "iniciado"})
-
+    return StreamingResponse(gerar(), media_type="text/event-stream",
+                             headers={
+                                 "Cache-Control": "no-cache, no-transform",
+                                 "X-Accel-Buffering": "no",
+                                 "Transfer-Encoding": "chunked"
+                             })
 
 @app.post("/api/chat")
 async def api_chat(request: Request):
@@ -342,24 +339,25 @@ async def download_pdf():
         for line in text.split('\n'):
             line = line.strip()
             if not line:
-                pdf.ln(2)
-                continue
-            if pdf.get_y() > 270:
-                pdf.add_page()
-            if '###' in line:
+                pdf.ln(3)
+            elif '###' in line:
                 clean = line.replace('###','').strip()
                 if clean:
-                    pdf.set_font('Helvetica', 'B', 11)
+                    pdf.set_font('Helvetica', 'B', 12)
                     pdf.set_text_color(194, 65, 12)
-                    pdf.ln(3)
-                    pdf.multi_cell(0, 6, clean[:100])
-                    pdf.ln(1)
-            else:
+                    pdf.ln(4)
+                    pdf.cell(0, 7, clean[:90], new_x='LMARGIN', new_y='NEXT')
+                    pdf.set_draw_color(249, 115, 22)
+                    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                    pdf.ln(2)
+            elif ' | ' in line:
                 pdf.set_font('Helvetica', '', 9)
-                pdf.set_text_color(30, 30, 30)
-                # Split long lines
-                words = line[:400]
-                pdf.multi_cell(0, 5, words)
+                pdf.set_text_color(50, 50, 50)
+                pdf.multi_cell(0, 5, line[:200])
+            else:
+                pdf.set_font('Helvetica', '', 10)
+                pdf.set_text_color(26, 26, 26)
+                pdf.multi_cell(0, 5, line[:200])
 
         saida = _BASE / "relatorio_auditoria.pdf"
         pdf.output(str(saida))

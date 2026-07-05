@@ -126,43 +126,60 @@ async def stream_verificar(request: Request):
 
             if tipo in ("a", "d"):
                 yield f"data: {json.dumps({'tipo': 'tool_inicio', 'tool': 'detectar_clashes_fn'})}\n\n"
-                await asyncio.sleep(0.4)
-                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': 'Abrindo IFC com ifcopenshell...'})}\n\n"
-                await asyncio.sleep(0.4)
-                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': 'Extraindo geometria 3D (bounding boxes)...'})}\n\n"
-                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': '>>> import ifcopenshell, ifcopenshell.geom'})}\n\n"
+                await asyncio.sleep(0.6)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': '>>> model = ifcopenshell.open(ifc_path)'})}\n\n"
+                await asyncio.sleep(0.6)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': '>>> settings.set(use-world-coords, True)'})}\n\n"
+                await asyncio.sleep(0.6)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': '>>> Extraindo geometria 3D de cada elemento...'})}\n\n"
+                await asyncio.sleep(0.8)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': '>>> Calculando bounding boxes AABB...'})}\n\n"
+                await asyncio.sleep(0.6)
                 r = detectar_clashes_fn()
-                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': 'Comparando disciplinas entre si e com estrutura...'})}\n\n"
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': '>>> Comparando HVAC x Estrutura...'})}\n\n"
                 await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': '>>> Comparando Hidraulica x Estrutura...'})}\n\n"
+                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': '>>> Comparando Eletrica x Estrutura...'})}\n\n"
+                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'detectar_clashes_fn', 'linha': '>>> Verificando clashes entre disciplinas...'})}\n\n"
+                await asyncio.sleep(0.5)
                 resultados["clashes"] = r
-                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'detectar_clashes_fn', 'resultado': r[:300]})}\n\n"
-                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'detectar_clashes_fn', 'resultado': r})}\n\n"
+                await asyncio.sleep(0.3)
 
             if tipo in ("b", "d"):
                 yield f"data: {json.dumps({'tipo': 'tool_inicio', 'tool': 'verificar_rota_fuga_fn'})}\n\n"
-                await asyncio.sleep(0.4)
-                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': 'Localizando portas no modelo IFC...'})}\n\n"
-                await asyncio.sleep(0.4)
-                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': 'Identificando portas corta-fogo...'})}\n\n"
-                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': '>>> portas = model.by_type(IfcDoor)'})}\n\n"
+                await asyncio.sleep(0.6)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': '>>> Filtrando PredefinedType = EMERGENCY...'})}\n\n"
+                await asyncio.sleep(0.6)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': '>>> matrix = util.placement.get_local_placement(door)'})}\n\n"
+                await asyncio.sleep(0.6)
                 r = verificar_rota_fuga_fn()
-                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': 'Calculando distancias em planta (metros)...'})}\n\n"
-                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': '>>> Calculando distancia euclidiana em planta...'})}\n\n"
+                await asyncio.sleep(0.5)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_rota_fuga_fn', 'linha': '>>> Comparando com limite NBR 9077 (30m)...'})}\n\n"
+                await asyncio.sleep(0.5)
                 resultados["rota_fuga"] = r
-                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'verificar_rota_fuga_fn', 'resultado': r[:300]})}\n\n"
-                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'verificar_rota_fuga_fn', 'resultado': r})}\n\n"
+                await asyncio.sleep(0.3)
 
             if tipo in ("c", "d"):
                 yield f"data: {json.dumps({'tipo': 'tool_inicio', 'tool': 'verificar_sistema_incendio_fn'})}\n\n"
-                await asyncio.sleep(0.4)
-                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_sistema_incendio_fn', 'linha': 'Localizando IfcFireSuppressionTerminal...'})}\n\n"
-                await asyncio.sleep(0.4)
-                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_sistema_incendio_fn', 'linha': 'Calculando cobertura extintores e sprinklers...'})}\n\n"
-                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_sistema_incendio_fn', 'linha': '>>> terminais = model.by_type(IfcFireSuppressionTerminal)'})}\n\n"
+                await asyncio.sleep(0.6)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_sistema_incendio_fn', 'linha': '>>> Separando ObjectType=Extinguisher e Sprinkler...'})}\n\n"
+                await asyncio.sleep(0.6)
                 r = verificar_sistema_incendio_fn()
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_sistema_incendio_fn', 'linha': '>>> Calculando raio de cobertura extintores (NBR 12693)...'})}\n\n"
+                await asyncio.sleep(0.5)
+                yield f"data: {json.dumps({'tipo': 'progresso', 'tool': 'verificar_sistema_incendio_fn', 'linha': '>>> Calculando area por cabeca sprinkler (NBR 10897)...'})}\n\n"
+                await asyncio.sleep(0.5)
                 resultados["sistema_incendio"] = r
-                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'verificar_sistema_incendio_fn', 'resultado': r[:300]})}\n\n"
-                await asyncio.sleep(0.4)
+                yield f"data: {json.dumps({'tipo': 'tool_fim', 'tool': 'verificar_sistema_incendio_fn', 'resultado': r})}\n\n"
+                await asyncio.sleep(0.3)
 
             yield f"data: {json.dumps({'tipo': 'formatando'})}\n\n"
             await asyncio.sleep(0.4)
@@ -176,7 +193,7 @@ DADOS REAIS:
 Apresente em markdown com tabelas. Use os nomes exatos dos elementos. Inclua resumo executivo."""
 
             client = anthropic.Anthropic()
-            with client.messages.stream(model="claude-sonnet-4-6", max_tokens=4096,
+            with client.messages.stream(model="claude-sonnet-4-6", max_tokens=8192,
                                         messages=[{"role": "user", "content": prompt}]) as stream:
                 for text in stream.text_stream:
                     yield f"data: {json.dumps({'tipo': 'conteudo', 'delta': text})}\n\n"
@@ -391,6 +408,7 @@ async def download_json():
     if not ifc:
         return JSONResponse({"erro": "Nenhum arquivo IFC carregado."}, status_code=400)
     try:
+        import ifcopenshell
         import ifcopenshell.util.unit as ifc_unit
         import ifcopenshell.util.placement as ifc_pl
         import math
@@ -430,12 +448,15 @@ async def download_json():
 
 @app.post("/api/trocar-ifc")
 async def api_trocar_ifc(request: Request):
+    global agente_global
+    # Reset everything
+    for k in ["arch", "struct", "mep", "exemplo"]:
+        ifc_paths[k] = None
+    agente_global = None
     data = await request.json()
     usar_exemplo = data.get("usar_exemplo", False)
     if usar_exemplo:
         ifc_paths["exemplo"] = str(_BASE / "modelo_exemplo.ifc")
-        for k in ["arch", "struct", "mep"]:
-            ifc_paths[k] = None
     return JSONResponse({"status": "ok", "ifc_ativo": ifc_ativo()})
 
 # ---------------------------------------------------------------------------

@@ -376,8 +376,8 @@ function usarExemplo() {
   document.getElementById('btnExemplo').classList.toggle('ativo', modoExemplo);
   if (modoExemplo) {
     arquivosCarregados = {};
-    ['uploadArch','uploadStruct','uploadMEP'].forEach(id => document.getElementById(id).classList.remove('loaded'));
-    ['nameArch','nameStruct','nameMEP'].forEach(id => document.getElementById(id).textContent = '');
+    document.getElementById('uploadIFC').classList.remove('loaded');
+    document.getElementById('listaArquivos').innerHTML = '';
   }
 }
 
@@ -598,7 +598,10 @@ function voltarMenu() {
   document.getElementById('chatArea').style.display = 'none';
 }
 
-function novaAnalise() {
+async function novaAnalise() {
+  // Reset backend
+  await fetch('/api/trocar-ifc', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({usar_exemplo: false})}).catch(()=>{});
+  // Reset frontend
   agentIniciado = false;
   modoExemplo = false;
   arquivosCarregados = {};
@@ -608,6 +611,7 @@ function novaAnalise() {
   document.getElementById('btnExemplo').classList.remove('ativo');
   document.getElementById('uploadIFC').classList.remove('loaded');
   document.getElementById('listaArquivos').innerHTML = '';
+  document.getElementById('apiKey').value = '';
   voltarMenu();
 }
 
